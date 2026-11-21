@@ -1,431 +1,615 @@
 --=====================================================================
---  JDEV v3  •  build à prova de falha
---  Mostra o erro na tela, abre sozinho, funciona sem LocalPlayer/Camera.
+--  JDEV  v4  •  LUNAR BUILD
+--  Emblema procedural, sidebar, status ao vivo, log, farm, hop, ESP.
 --=====================================================================
+if getgenv and getgenv().JDEV_LOADED then
+	local prev = getgenv().JDEV_LOADED
+	if typeof(prev) == "Instance" and prev.Parent then prev:Destroy() end
+end
 if not game:IsLoaded() then game.Loaded:Wait() end
-task.wait(0.2)
+task.wait(0.15)
 
-local Players  = game:GetService("Players")
-local RS       = game:GetService("ReplicatedStorage")
-local Run      = game:GetService("RunService")
-local Tween    = game:GetService("TweenService")
-local UIS      = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local Run = game:GetService("RunService")
+local Tween = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local Http = game:GetService("HttpService")
+local Teleport = game:GetService("TeleportService")
+local Stats = game:GetService("Stats")
 
 local C = {
-	bg = Color3.fromRGB(11, 11, 14), card = Color3.fromRGB(23, 23, 29),
-	hover = Color3.fromRGB(33, 33, 42), line = Color3.fromRGB(38, 38, 48),
-	text = Color3.fromRGB(230, 230, 238), dim = Color3.fromRGB(118, 118, 132),
-	accent = Color3.fromRGB(139, 124, 255), good = Color3.fromRGB(88, 222, 143),
-	bad = Color3.fromRGB(255, 96, 96),
+	bg = Color3.fromRGB(9, 9, 14),
+	panel = Color3.fromRGB(14, 14, 21),
+	card = Color3.fromRGB(20, 20, 29),
+	hover = Color3.fromRGB(30, 29, 43),
+	line = Color3.fromRGB(38, 36, 54),
+	text = Color3.fromRGB(233, 231, 245),
+	dim = Color3.fromRGB(126, 122, 150),
+	violet = Color3.fromRGB(146, 108, 255),
+	blue = Color3.fromRGB(86, 156, 255),
+	cyan = Color3.fromRGB(120, 220, 255),
+	good = Color3.fromRGB(92, 224, 148),
+	bad = Color3.fromRGB(255, 96, 110),
 }
 
+--==================== HELPERS =========================================
 local function new(class, props, parent)
 	local o = Instance.new(class)
-	for k, v in pairs(props) do pcall(function() o[k] = v end) end
+	if props then
+		for k, v in pairs(props) do
+			if k ~= "Parent" then o[k] = v end
+		end
+	end
 	if parent then o.Parent = parent end
 	return o
 end
 local function corner(o, r) return new("UICorner", { CornerRadius = UDim.new(0, r) }, o) end
 local function stroke(o, col, t, tr)
-	return new("UIStroke", { Color = col or C.line, Thickness = t or 1, Transparency = tr or 0.45 }, o)
+	return new("UIStroke", { Color = col or C.line, Thickness = t or 1, Transparency = tr or 0.4 }, o)
+end
+local function grad(o, a, b, rot)
+	local g = new("UIGradient", { Rotation = rot or 90 }, o)
+	g.Color = ColorSequence.new(a, b)
+	return g
+end
+local function pad(o, t, r, b, l)
+	return new("UIPadding", {
+		PaddingTop = UDim.new(0, t or 0), PaddingRight = UDim.new(0, r or 0),
+		PaddingBottom = UDim.new(0, b or 0), PaddingLeft = UDim.new(0, l or 0),
+	}, o)
 end
 local function cam() return workspace.CurrentCamera end
-local function vpSize()
+local function vp()
 	local c = workspace.CurrentCamera
 	return c and c.ViewportSize or Vector2.new(1280, 720)
 end
 
---==================== PLAYER (compatível com Script e LocalScript) =====
-local Player
-if Players.LocalPlayer then
-	Player = Players.LocalPlayer
-else
-	local t = 0
-	repeat
-		task.wait(0.2)
-		t += 0.2
-		Player = Players:GetPlayers()[1]
-	until Player or t > 6
+--==================== PLAYER ==========================================
+local Player = Players.LocalPlayer
+local guard = 0
+while not Player and guard < 40 do
+	task.wait(0.15)
+	Player = Players.LocalPlayer or Players:GetPlayers()[1]
+	guard += 1
 end
-
-local PlayerGui = Player and Player:WaitForChild("PlayerGui", 10)
+if not Player then
+	warn("[JDEV] sem player")
+	return
+end
+local PlayerGui = Player:FindFirstChildOfClass("PlayerGui") or Player:WaitForChild("PlayerGui", 10)
 if not PlayerGui then
-	warn("[JDEV] PlayerGui não encontrado. Rode como LocalScript ou executor.")
+	warn("[JDEV] sem PlayerGui — rode como LocalScript")
 	return
 end
 
 local old = PlayerGui:FindFirstChild("JDEV")
 if old then old:Destroy() end
 
---==================== GUI BASE (existe antes de tudo) =================
+--==================== GUI + WATCHDOG ==================================
 local Gui = new("ScreenGui", {
 	Name = "JDEV", ResetOnSpawn = false, IgnoreGuiInset = true,
-	DisplayOrder = 2147483647, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	Parent = PlayerGui,
-})
+	DisplayOrder = 999999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, PlayerGui)
+if getgenv then getgenv().JDEV_LOADED = Gui end
+
+-- sonda: se isso aparece, GUI funciona
+local probe = new("Frame", {
+	Size = UDim2.fromOffset(150, 26), Position = UDim2.fromOffset(14, 14),
+	BackgroundColor3 = C.card, BorderSizePixel = 0, ZIndex = 90,
+}, Gui)
+corner(probe, 6)
+stroke(probe, C.violet, 1, 0.3)
+local probeLbl = new("TextLabel", {
+	Text = "carregando…", Font = Enum.Font.GothamMedium, TextSize = 12,
+	TextColor3 = C.dim, BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+}, probe)
 
 local errBox = new("TextLabel", {
-	Name = "ErrBox", Size = UDim2.new(1, -40, 0, 0), Position = UDim2.new(0, 20, 0, 20),
-	BackgroundColor3 = Color3.fromRGB(60, 12, 16), TextColor3 = Color3.new(1, 1, 1),
-	Font = Enum.Font.Code, TextSize = 12, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y,
-	TextXAlignment = Enum.TextXAlignment.Left, Visible = false, ZIndex = 60, Parent = Gui,
-})
-corner(errBox, 8)
-new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6) }, errBox)
+	Size = UDim2.new(1, -28, 0, 0), Position = UDim2.fromOffset(14, 48),
+	BackgroundColor3 = Color3.fromRGB(58, 12, 20), TextColor3 = Color3.new(1, 1, 1),
+	Font = Enum.Font.Code, TextSize = 11, TextWrapped = true,
+	AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left,
+	Visible = false, ZIndex = 95, BorderSizePixel = 0,
+}, Gui)
+corner(errBox, 6)
+pad(errBox, 7, 8, 7, 8)
 
-local function showError(msg)
-	errBox.Text = "JDEV ERRO\n" .. tostring(msg)
+local function fail(msg)
+	errBox.Text = "JDEV · ERRO\n" .. tostring(msg)
 	errBox.Visible = true
+	probeLbl.Text = "erro"
+	probeLbl.TextColor3 = C.bad
 	warn("[JDEV] " .. tostring(msg))
+end
+
+task.delay(6, function()
+	if probeLbl.Text == "carregando…" then
+		probeLbl.Text = "travado aqui"
+		probeLbl.TextColor3 = C.bad
+	end
+end)
+
+--==================== EMBLEMA =========================================
+local function emblem(parent, size)
+	local box = new("Frame", {
+		Size = UDim2.fromOffset(size, size), BackgroundColor3 = Color3.fromRGB(6, 6, 11),
+		BorderSizePixel = 0, ClipsDescendants = true,
+	}, parent)
+	corner(box, math.floor(size * 0.26))
+	grad(box, Color3.fromRGB(16, 10, 30), Color3.fromRGB(6, 8, 18), 45)
+
+	local ring = new("Frame", {
+		Size = UDim2.fromScale(0.9, 0.9), Position = UDim2.fromScale(0.05, 0.05),
+		BackgroundTransparency = 1,
+	}, box)
+	corner(ring, 999)
+	local rs = stroke(ring, C.violet, 1, 0.15)
+	grad(rs, C.violet, C.blue, 45)
+
+	local moon = new("Frame", {
+		Size = UDim2.fromScale(0.54, 0.54), Position = UDim2.fromScale(0.23, 0.23),
+		BackgroundColor3 = Color3.fromRGB(120, 190, 255), BorderSizePixel = 0,
+	}, box)
+	corner(moon, 999)
+	grad(moon, Color3.fromRGB(150, 215, 255), Color3.fromRGB(70, 120, 255), 120)
+
+	local bite = new("Frame", {
+		Size = UDim2.fromScale(0.5, 0.5), Position = UDim2.fromScale(0.36, 0.2),
+		BackgroundColor3 = Color3.fromRGB(9, 9, 16), BorderSizePixel = 0,
+	}, box)
+	corner(bite, 999)
+
+	local starA = new("Frame", {
+		Size = UDim2.fromScale(0.075, 0.56), Position = UDim2.fromScale(0.462, 0.22),
+		BackgroundColor3 = Color3.fromRGB(226, 210, 255), BorderSizePixel = 0,
+	}, box)
+	corner(starA, 999)
+	local starB = new("Frame", {
+		Size = UDim2.fromScale(0.075, 0.56), Position = UDim2.fromScale(0.462, 0.22),
+		Rotation = 90, BackgroundColor3 = Color3.fromRGB(226, 210, 255), BorderSizePixel = 0,
+	}, box)
+	corner(starB, 999)
+	starA.Size = UDim2.fromScale(0.56, 0.075)
+	starA.Position = UDim2.fromScale(0.22, 0.462)
+	starB.Size = UDim2.fromScale(0.56, 0.075)
+	starB.Position = UDim2.fromScale(0.22, 0.462)
+	starA.Rotation = 45
+	starB.Rotation = 135
+	grad(starA, C.cyan, C.violet, 0)
+	grad(starB, C.cyan, C.violet, 0)
+
+	local core = new("Frame", {
+		Size = UDim2.fromScale(0.13, 0.13), Position = UDim2.fromScale(0.435, 0.435),
+		BackgroundColor3 = Color3.fromRGB(255, 255, 255), BorderSizePixel = 0,
+	}, box)
+	corner(core, 999)
+
+	local flame = new("Frame", {
+		Size = UDim2.fromScale(0.07, 0.11), Position = UDim2.fromScale(0.465, 0.055),
+		Rotation = 45, BackgroundColor3 = C.violet, BorderSizePixel = 0,
+	}, box)
+	corner(flame, 3)
+
+	local s1 = new("Frame", {
+		Size = UDim2.fromScale(0.06, 0.06), Position = UDim2.fromScale(0.02, 0.47),
+		Rotation = 45, BackgroundColor3 = C.blue, BorderSizePixel = 0,
+	}, box)
+	corner(s1, 2)
+	local s2 = new("Frame", {
+		Size = UDim2.fromScale(0.06, 0.06), Position = UDim2.fromScale(0.92, 0.47),
+		Rotation = 45, BackgroundColor3 = C.blue, BorderSizePixel = 0,
+	}, box)
+	corner(s2, 2)
+
+	return box
 end
 
 --==================== BUILD ===========================================
 local ok, err = pcall(function()
 
--- toasts
+--========== LOG / STATUS ==========
+local logLines = {}
+local counters = { spawnOk = 0, spawnFail = 0, groups = 0, groupsFail = 0 }
+local startedAt = os.clock()
+
+--========== TOASTS ==========
 local toastHolder = new("Frame", {
-	Size = UDim2.new(0, 260, 1, -20), Position = UDim2.new(1, -280, 0, 10),
-	BackgroundTransparency = 1, Parent = Gui,
-})
+	Size = UDim2.new(0, 250, 1, -24), Position = UDim2.new(1, -264, 0, 12),
+	BackgroundTransparency = 1, ZIndex = 40,
+}, Gui)
 new("UIListLayout", {
 	SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom,
 	HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 6),
 }, toastHolder)
 
-local toastCount = 0
-local function Notify(txt, bad)
-	toastCount += 1
+local toastN = 0
+local function Notify(txt, kind)
+	toastN += 1
+	local col = C.violet
+	if kind == "bad" then col = C.bad elseif kind == "good" then col = C.good end
 	local card = new("Frame", {
-		Size = UDim2.new(0, 0, 0, 30), BackgroundColor3 = C.card,
-		BackgroundTransparency = 0.05, LayoutOrder = toastCount, Parent = toastHolder,
-	})
-	corner(card, 8)
-	stroke(card, bad and C.bad or C.accent, 1, 0.35)
-	local bar = new("Frame", {
-		Size = UDim2.new(0, 3, 0.6, 0), Position = UDim2.new(0, 6, 0.2, 0),
-		BackgroundColor3 = bad and C.bad or C.accent, BorderSizePixel = 0, Parent = card,
-	})
-	corner(bar, 2)
+		Size = UDim2.fromOffset(0, 30), BackgroundColor3 = C.card,
+		BackgroundTransparency = 0.06, LayoutOrder = toastN, ZIndex = 41,
+	}, toastHolder)
+	corner(card, 7)
+	stroke(card, col, 1, 0.25)
+	new("Frame", {
+		Size = UDim2.new(0, 3, 0.55, 0), Position = UDim2.new(0, 6, 0.22, 0),
+		BackgroundColor3 = col, BorderSizePixel = 0,
+	}, card)
 	new("TextLabel", {
-		Text = tostring(txt), Font = Enum.Font.GothamMedium, TextSize = 12, TextColor3 = C.text,
-		BackgroundTransparency = 1, Size = UDim2.new(1, -22, 1, 0), Position = UDim2.new(0, 16, 0, 0),
-		TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = card,
-	})
-	Tween:Create(card, TweenInfo.new(0.22, Enum.EasingStyle.Quint), { Size = UDim2.new(0, 236, 0, 30) }):Play()
-	task.delay(2.2, function()
-		Tween:Create(card, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
+		Text = tostring(txt), Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = C.text,
+		BackgroundTransparency = 1, Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 15, 0, 0),
+		TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+	}, card)
+	Tween:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Quint), { Size = UDim2.fromOffset(230, 30) }):Play()
+	task.delay(2.3, function()
+		Tween:Create(card, TweenInfo.new(0.18), { BackgroundTransparency = 1 }):Play()
 		for _, d in ipairs(card:GetDescendants()) do
-			if d:IsA("TextLabel") then Tween:Create(d, TweenInfo.new(0.2), { TextTransparency = 1 }):Play() end
+			if d:IsA("TextLabel") then Tween:Create(d, TweenInfo.new(0.18), { TextTransparency = 1 }):Play() end
 		end
-		task.wait(0.25)
+		task.wait(0.2)
 		card:Destroy()
 	end)
 end
 
--- drag
+--========== DRAG ==========
 local function draggable(frame, handle)
-	local dragging, dragInput, start, origin
+	local drag, input, origin, start
 	handle.InputBegan:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-			dragging, start, origin = true, i.Position, frame.Position
+			drag, origin, start = true, frame.Position, i.Position
 			i.Changed:Connect(function()
-				if i.UserInputState == Enum.UserInputState.End then dragging = false end
+				if i.UserInputState == Enum.UserInputState.End then drag = false end
 			end)
 		end
 	end)
 	handle.InputChanged:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
-			dragInput = i
+			input = i
 		end
 	end)
 	UIS.InputChanged:Connect(function(i)
-		if i ~= dragInput or not dragging then return end
+		if i ~= input or not drag then return end
 		local d = i.Position - start
-		local vp = vpSize()
-		local nx = math.clamp(origin.X.Offset + d.X, 0, vp.X - frame.AbsoluteSize.X)
-		local ny = math.clamp(origin.Y.Offset + d.Y, 0, vp.Y - frame.AbsoluteSize.Y)
-		frame.Position = UDim2.new(0, nx, 0, ny)
+		local s = vp()
+		frame.Position = UDim2.fromOffset(
+			math.clamp(origin.X.Offset + d.X, 0, s.X - frame.AbsoluteSize.X),
+			math.clamp(origin.Y.Offset + d.Y, 0, s.Y - frame.AbsoluteSize.Y)
+		)
 	end)
 end
 
-local vp = vpSize()
-local W = math.clamp(vp.X - 56, 288, 400)
-local H = math.clamp(vp.Y - 140, 320, 540)
-
--- orbe J
+--========== ORBE ==========
 local Orb = new("TextButton", {
-	Name = "Orb", Text = "", Size = UDim2.new(0, 48, 0, 48),
-	Position = UDim2.new(0, 16, 0, 16), BackgroundColor3 = C.accent,
-	AutoButtonColor = false, Parent = Gui,
-})
-corner(Orb, 24)
-stroke(Orb, C.accent, 1, 0.1)
-local OrbLbl = new("TextLabel", {
-	Text = "J", Font = Enum.Font.GothamBlack, TextSize = 23, TextColor3 = C.bg,
-	BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = Orb,
-})
+	Text = "", Size = UDim2.fromOffset(52, 52), Position = UDim2.fromOffset(14, 14),
+	BackgroundColor3 = C.panel, AutoButtonColor = false, ZIndex = 30,
+}, Gui)
+corner(Orb, 16)
+stroke(Orb, C.violet, 1, 0.15)
+emblem(Orb, 52)
 draggable(Orb, Orb)
 
--- janela
+--========== JANELA ==========
+local s0 = vp()
+local WW = math.clamp(s0.X - 48, 300, 430)
+local HH = math.clamp(s0.Y - 120, 330, 560)
+
 local Win = new("Frame", {
-	Name = "Window", Size = UDim2.new(0, W, 0, H),
-	Position = UDim2.new(0.5, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5),
-	BackgroundColor3 = C.bg, ClipsDescendants = true, Parent = Gui,
-})
+	Size = UDim2.fromOffset(WW, HH), Position = UDim2.new(0.5, 0, 0.5, 0),
+	AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = C.bg,
+	ClipsDescendants = true, Visible = false, ZIndex = 20,
+}, Gui)
 corner(Win, 14)
-stroke(Win, C.line, 1, 0.2)
+stroke(Win, C.line, 1, 0.1)
 new("Frame", {
-	Size = UDim2.new(1, 0, 0, 90), BackgroundColor3 = C.accent,
-	BackgroundTransparency = 0.93, BorderSizePixel = 0, Parent = Win,
-})
+	Size = UDim2.new(1, 0, 0, 120), BackgroundColor3 = C.violet,
+	BackgroundTransparency = 0.94, BorderSizePixel = 0,
+}, Win)
 
-local Top = new("Frame", { Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, Parent = Win })
-draggable(Win, Top)
-local Badge = new("Frame", {
-	Size = UDim2.new(0, 24, 0, 24), Position = UDim2.new(0, 12, 0, 9),
-	BackgroundColor3 = C.card, Parent = Top,
-})
-corner(Badge, 7)
-new("TextLabel", {
-	Text = "J", Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = C.accent,
-	BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = Badge,
-})
-new("TextLabel", {
-	Text = "JDEV", Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = C.dim,
-	BackgroundTransparency = 1, Size = UDim2.new(0, 90, 0, 24), Position = UDim2.new(0, 42, 0, 9),
-	TextXAlignment = Enum.TextXAlignment.Left, Parent = Top,
-})
-local MinBtn = new("TextButton", {
-	Text = "—", Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = C.dim,
-	BackgroundColor3 = C.card, Size = UDim2.new(0, 24, 0, 24),
-	Position = UDim2.new(1, -36, 0, 9), AutoButtonColor = false, Parent = Top,
-})
-corner(MinBtn, 7)
-MinBtn.MouseButton1Click:Connect(function() Win.Visible = false end)
+--========== HEADER ==========
+local Header = new("Frame", {
+	Size = UDim2.new(1, -56, 0, 54), Position = UDim2.fromOffset(56, 0),
+	BackgroundTransparency = 1,
+}, Win)
+draggable(Win, Header)
 
--- abas
-local TabBar = new("ScrollingFrame", {
-	Size = UDim2.new(1, -24, 0, 32), Position = UDim2.new(0, 12, 0, 44),
-	BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0,
-	CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.X,
-	ScrollingDirection = Enum.ScrollingDirection.X, Parent = Win,
-})
-new("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5),
-	SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Center,
-}, TabBar)
+local logo = emblem(Header, 34)
+logo.Position = UDim2.fromOffset(0, 11)
 
-local Pages = new("Frame", {
-	Size = UDim2.new(1, -24, 1, -96), Position = UDim2.new(0, 12, 0, 84),
-	BackgroundTransparency = 1, Parent = Win,
-})
+local Title = new("TextLabel", {
+	Text = "JDEV", Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = C.text,
+	BackgroundTransparency = 1, Size = UDim2.fromOffset(80, 17), Position = UDim2.fromOffset(42, 9),
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, Header)
+local Sub = new("TextLabel", {
+	Text = "lunar build", Font = Enum.Font.Gotham, TextSize = 10, TextColor3 = C.dim,
+	BackgroundTransparency = 1, Size = UDim2.fromOffset(110, 13), Position = UDim2.fromOffset(42, 26),
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, Header)
 
-local TabBtns, PageFrames = {}, {}
+local Pill = new("Frame", {
+	Size = UDim2.fromOffset(96, 20), Position = UDim2.fromOffset(42, 40),
+	BackgroundColor3 = C.card, BorderSizePixel = 0,
+}, Header)
+corner(Pill, 10)
+local pillDot = new("Frame", {
+	Size = UDim2.fromOffset(6, 6), Position = UDim2.fromOffset(7, 7),
+	BackgroundColor3 = C.dim, BorderSizePixel = 0,
+}, Pill)
+corner(pillDot, 3)
+local pillTxt = new("TextLabel", {
+	Text = "idle", Font = Enum.Font.GothamMedium, TextSize = 10, TextColor3 = C.dim,
+	BackgroundTransparency = 1, Size = UDim2.new(1, -18, 1, 0), Position = UDim2.fromOffset(18, 0),
+	TextXAlignment = Enum.TextXAlignment.Left,
+}, Pill)
+
+local function setPill(txt, kind)
+	pillTxt.Text = txt
+	local col = C.dim
+	if kind == "ok" then col = C.good elseif kind == "bad" then col = C.bad elseif kind == "busy" then col = C.cyan end
+	pillTxt.TextColor3 = col
+	pillDot.BackgroundColor3 = col
+end
+
+local Min = new("TextButton", {
+	Text = "—", Font = Enum.Font.GothamBold, TextSize = 13, TextColor3 = C.dim,
+	BackgroundColor3 = C.card, Size = UDim2.fromOffset(22, 22),
+	Position = UDim2.new(1, -30, 0, 14), AutoButtonColor = false,
+}, Header)
+corner(Min, 6)
+Min.MouseButton1Click:Connect(function() Win.Visible = false end)
+
+--========== SIDEBAR ==========
+local Rail = new("Frame", {
+	Size = UDim2.new(0, 56, 1, -54), Position = UDim2.fromOffset(0, 54),
+	BackgroundColor3 = C.panel, BorderSizePixel = 0,
+}, Win)
+new("Frame", {
+	Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0),
+	BackgroundColor3 = C.line, BorderSizePixel = 0, BackgroundTransparency = 0.4,
+}, Rail)
+pad(Rail, 6, 6, 6, 6)
+new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, Rail)
+
+--========== ÁREA DE PÁGINAS ==========
+local Body = new("Frame", {
+	Size = UDim2.new(1, -56, 1, -54), Position = UDim2.fromOffset(56, 54),
+	BackgroundTransparency = 1,
+}, Win)
+
+local Pages, TabBtns = {}, {}
 local activeTab
 
 local function newPage(name)
-	local p = new("ScrollingFrame", {
-		Name = name, Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1,
+	local sc = new("ScrollingFrame", {
+		Name = name, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
 		BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = C.line,
-		CanvasSize = UDim2.new(0, 0, 0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		Visible = false, Parent = Pages,
-	})
-	new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, p)
-	new("UIPadding", { PaddingBottom = UDim.new(0, 12) }, p)
-	PageFrames[name] = p
-	return p
+		CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		Visible = false,
+	}, Body)
+	pad(sc, 10, 10, 14, 12)
+	new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, sc)
+	Pages[name] = sc
+	return sc
 end
 
 local function showTab(name)
 	for n, btn in pairs(TabBtns) do
-		btn.TextColor3 = C.dim
 		btn.BackgroundColor3 = C.card
-		if PageFrames[n] then PageFrames[n].Visible = false end
+		btn.TextColor3 = C.dim
+		btn.TextSize = 9
+		if Pages[n] then Pages[n].Visible = false end
 	end
 	activeTab = name
 	if TabBtns[name] then
-		TabBtns[name].TextColor3 = C.accent
 		TabBtns[name].BackgroundColor3 = C.hover
+		TabBtns[name].TextColor3 = C.violet
 	end
-	if PageFrames[name] then PageFrames[name].Visible = true end
+	if Pages[name] then Pages[name].Visible = true end
 end
 
--- componentes
+--========== COMPONENTES ==========
 local function Section(page, txt)
-	local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, Parent = page })
+	local h = new("Frame", { Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1 }, page)
 	new("TextLabel", {
-		Text = string.upper(txt), Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = C.dim,
-		BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0),
-		TextXAlignment = Enum.TextXAlignment.Left, Parent = holder,
-	})
-	return holder
+		Text = string.upper(txt), Font = Enum.Font.GothamBold, TextSize = 9,
+		TextColor3 = C.dim, BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, h)
+	return h
+end
+
+local function Card(page, height)
+	local f = new("Frame", {
+		Size = UDim2.new(1, 0, 0, height), BackgroundColor3 = C.card, BorderSizePixel = 0,
+	}, page)
+	corner(f, 8)
+	stroke(f, C.line, 1, 0.65)
+	return f
 end
 
 local function Button(page, txt, cb, accent)
 	local b = new("TextButton", {
-		Text = "", Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = C.card,
-		AutoButtonColor = false, Parent = page,
-	})
+		Text = "", Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = C.card,
+		AutoButtonColor = false, BorderSizePixel = 0,
+	}, page)
 	corner(b, 8)
-	stroke(b, C.line, 1, 0.6)
+	stroke(b, C.line, 1, 0.65)
 	new("TextLabel", {
-		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 13,
-		TextColor3 = accent and C.accent or C.text, BackgroundTransparency = 1,
-		Size = UDim2.new(1, -18, 1, 0), Position = UDim2.new(0, 11, 0, 0),
-		TextXAlignment = Enum.TextXAlignment.Left, Parent = b,
-	})
+		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 12,
+		TextColor3 = accent and C.violet or C.text, BackgroundTransparency = 1,
+		Size = UDim2.new(1, -20, 1, 0), Position = UDim2.fromOffset(10, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, b)
+	b.MouseEnter:Connect(function() b.BackgroundColor3 = C.hover end)
+	b.MouseLeave:Connect(function() b.BackgroundColor3 = C.card end)
 	b.MouseButton1Click:Connect(function()
-		Tween:Create(b, TweenInfo.new(0.08), { BackgroundColor3 = C.hover }):Play()
+		b.BackgroundColor3 = C.hover
 		task.delay(0.1, function()
-			if b.Parent then Tween:Create(b, TweenInfo.new(0.15), { BackgroundColor3 = C.card }):Play() end
+			if b.Parent then b.BackgroundColor3 = C.card end
 		end)
-		cb(b)
+		local okc, e = pcall(cb, b)
+		if not okc then Notify(tostring(e), "bad") end
 	end)
 	return b
 end
 
 local function GridButton(grid, txt, col, cb)
 	local b = new("TextButton", {
-		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = col or C.text,
-		BackgroundColor3 = C.card, AutoButtonColor = false,
-		TextTruncate = Enum.TextTruncate.AtEnd, Parent = grid,
-	})
+		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 10, TextColor3 = col or C.text,
+		BackgroundColor3 = C.card, AutoButtonColor = false, BorderSizePixel = 0,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+	}, grid)
 	corner(b, 6)
-	b.MouseButton1Click:Connect(function() cb(b) end)
+	b.MouseButton1Click:Connect(function()
+		local okc, e = pcall(cb, b)
+		if not okc then Notify(tostring(e), "bad") end
+	end)
 	return b
 end
 
-local function Toggle(page, txt, default, cb)
-	local state = default or false
-	local row = new("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = C.card, Parent = page })
-	corner(row, 8)
-	stroke(row, C.line, 1, 0.6)
+local function Toggle(page, txt, def, cb)
+	local on = def or false
+	local row = Card(page, 32)
 	new("TextLabel", {
-		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 13, TextColor3 = C.text,
-		BackgroundTransparency = 1, Size = UDim2.new(1, -60, 1, 0), Position = UDim2.new(0, 11, 0, 0),
-		TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
-	})
-	local hit = new("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = row })
+		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 12, TextColor3 = C.text,
+		BackgroundTransparency = 1, Size = UDim2.new(1, -56, 1, 0), Position = UDim2.fromOffset(10, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+	}, row)
+	local hit = new("TextButton", { Text = "", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1) }, row)
 	local track = new("Frame", {
-		Size = UDim2.new(0, 32, 0, 17), Position = UDim2.new(1, -43, 0.5, -8.5),
-		BackgroundColor3 = Color3.fromRGB(45, 45, 55), Parent = row,
-	})
-	corner(track, 9)
+		Size = UDim2.fromOffset(30, 16), Position = UDim2.new(1, -40, 0.5, -8),
+		BackgroundColor3 = Color3.fromRGB(42, 41, 56), BorderSizePixel = 0,
+	}, row)
+	corner(track, 8)
 	local knob = new("Frame", {
-		Size = UDim2.new(0, 13, 0, 13), Position = UDim2.new(0, 2, 0.5, -6.5),
-		BackgroundColor3 = C.text, Parent = track,
-	})
-	corner(knob, 7)
+		Size = UDim2.fromOffset(12, 12), Position = UDim2.new(0, 2, 0.5, -6),
+		BackgroundColor3 = C.text, BorderSizePixel = 0,
+	}, track)
+	corner(knob, 6)
 	local function apply(v)
-		state = v
-		track.BackgroundColor3 = v and C.accent or Color3.fromRGB(45, 45, 55)
-		knob.Position = v and UDim2.new(1, -15, 0.5, -6.5) or UDim2.new(0, 2, 0.5, -6.5)
-		cb(v)
+		on = v
+		track.BackgroundColor3 = v and C.violet or Color3.fromRGB(42, 41, 56)
+		knob.Position = v and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
+		local okc, e = pcall(cb, v)
+		if not okc then Notify(tostring(e), "bad") end
 	end
-	hit.MouseButton1Click:Connect(function() apply(not state) end)
-	return { set = apply, get = function() return state end }
+	hit.MouseButton1Click:Connect(function() apply(not on) end)
+	return { set = apply, get = function() return on end }
 end
 
-local function Slider(page, txt, min, max, default, cb)
-	local row = new("Frame", { Size = UDim2.new(1, 0, 0, 48), BackgroundColor3 = C.card, Parent = page })
-	corner(row, 8)
-	stroke(row, C.line, 1, 0.6)
+local function Slider(page, txt, min, max, def, cb)
+	local row = Card(page, 46)
 	local lbl = new("TextLabel", {
-		Text = txt .. "  " .. tostring(default), Font = Enum.Font.GothamMedium, TextSize = 12,
-		TextColor3 = C.text, BackgroundTransparency = 1, Size = UDim2.new(1, -22, 0, 24),
-		Position = UDim2.new(0, 11, 0, 5), TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
-	})
+		Text = txt .. "  " .. tostring(def), Font = Enum.Font.GothamMedium, TextSize = 11,
+		TextColor3 = C.text, BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 22),
+		Position = UDim2.fromOffset(10, 4), TextXAlignment = Enum.TextXAlignment.Left,
+	}, row)
 	local track = new("Frame", {
-		Size = UDim2.new(1, -22, 0, 4), Position = UDim2.new(0, 11, 0, 34),
-		BackgroundColor3 = Color3.fromRGB(45, 45, 55), Parent = row,
-	})
+		Size = UDim2.new(1, -20, 0, 4), Position = UDim2.fromOffset(10, 32),
+		BackgroundColor3 = Color3.fromRGB(42, 41, 56), BorderSizePixel = 0,
+	}, row)
 	corner(track, 2)
 	local fill = new("Frame", {
-		Size = UDim2.new((default - min) / (max - min), 0, 1, 0),
-		BackgroundColor3 = C.accent, BorderSizePixel = 0, Parent = track,
-	})
+		Size = UDim2.new((def - min) / (max - min), 0, 1, 0),
+		BackgroundColor3 = C.violet, BorderSizePixel = 0,
+	}, track)
 	corner(fill, 2)
+	grad(fill, C.violet, C.blue, 0)
 	local knob = new("Frame", {
-		Size = UDim2.new(0, 10, 0, 10), AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(fill.Size.X.Scale, 0, 0.5, 0), BackgroundColor3 = C.text, Parent = track,
-	})
+		Size = UDim2.fromOffset(9, 9), AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(fill.Size.X.Scale, 0, 0.5, 0), BackgroundColor3 = C.text,
+		BorderSizePixel = 0,
+	}, track)
 	corner(knob, 5)
 	local dragging = false
-	local function set(alpha)
-		alpha = math.clamp(alpha, 0, 1)
-		fill.Size = UDim2.new(alpha, 0, 1, 0)
-		knob.Position = UDim2.new(alpha, 0, 0.5, 0)
-		local val = math.floor(min + (max - min) * alpha + 0.5)
-		lbl.Text = txt .. "  " .. tostring(val)
-		cb(val)
-	end
-	local function fromX(x)
-		set((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1))
+	local function set(a)
+		a = math.clamp(a, 0, 1)
+		fill.Size = UDim2.new(a, 0, 1, 0)
+		knob.Position = UDim2.new(a, 0, 0.5, 0)
+		local v = math.floor(min + (max - min) * a + 0.5)
+		lbl.Text = txt .. "  " .. tostring(v)
+		cb(v)
 	end
 	track.InputBegan:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
-			fromX(i.Position.X)
+			set((i.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1))
 			i.Changed:Connect(function()
 				if i.UserInputState == Enum.UserInputState.End then dragging = false end
 			end)
 		end
 	end)
 	UIS.InputChanged:Connect(function(i)
-		if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-			fromX(i.Position.X)
+		if not dragging then return end
+		if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+			set((i.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1))
 		end
 	end)
 	return { set = function(v) set((v - min) / (max - min)) end }
 end
 
 local function Input(page, placeholder, onSubmit)
-	local box = new("TextBox", {
-		Size = UDim2.new(1, 0, 0, 32), BackgroundColor3 = C.card, Text = "",
-		PlaceholderText = placeholder, PlaceholderColor3 = C.dim, Font = Enum.Font.GothamMedium,
-		TextSize = 12, TextColor3 = C.text, ClearTextOnFocus = false, Parent = page,
-	})
-	corner(box, 8)
-	stroke(box, C.line, 1, 0.6)
-	new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, box)
-	box.FocusLost:Connect(function(enter)
-		if enter and box.Text ~= "" then
-			onSubmit(box.Text)
-			box.Text = ""
+	local b = new("TextBox", {
+		Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = C.card, Text = "",
+		PlaceholderText = placeholder, PlaceholderColor3 = C.dim,
+		Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = C.text,
+		ClearTextOnFocus = false, BorderSizePixel = 0,
+	}, page)
+	corner(b, 7)
+	stroke(b, C.line, 1, 0.65)
+	pad(b, 0, 8, 0, 8)
+	b.FocusLost:Connect(function(enter)
+		if enter and b.Text ~= "" then
+			onSubmit(b.Text)
+			b.Text = ""
 		end
 	end)
-	return box
+	return b
 end
 
-local function Grid(page, cols, cellH)
-	local g = new("Frame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, Parent = page })
+local function Grid(page, cols, h)
+	local g = new("Frame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1 }, page)
 	new("UIGridLayout", {
-		CellSize = UDim2.new(1 / cols, -4, 0, cellH or 30), CellPadding = UDim2.new(0, 4, 0, 4),
+		CellSize = UDim2.new(1 / cols, -3, 0, h or 26), CellPadding = UDim2.new(0, 3, 0, 3),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, g)
 	return g
 end
 
-for i, name in ipairs({ "Teleport", "Spawn", "Player", "Combate", "Visual", "Admin" }) do
+--========== ABAS (rail) ==========
+local TABS = {
+	{ "TP", "Teleport" }, { "SP", "Spawn" }, { "PL", "Player" }, { "CB", "Combat" },
+	{ "VS", "Visual" }, { "ST", "Status" }, { "AD", "Admin" },
+}
+for i, t in ipairs(TABS) do
 	local b = new("TextButton", {
-		Text = name, Font = Enum.Font.GothamSemibold, TextSize = 12, TextColor3 = C.dim,
-		BackgroundColor3 = C.card, Size = UDim2.new(0, 0, 0, 26), AutomaticSize = Enum.AutomaticSize.X,
-		LayoutOrder = i, AutoButtonColor = false, Parent = TabBar,
-	})
-	new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, b)
-	corner(b, 7)
-	TabBtns[name] = b
-	b.MouseButton1Click:Connect(function()
-		if activeTab ~= name then showTab(name) end
+		Text = t[1], Font = Enum.Font.GothamBold, TextSize = 9, TextColor3 = C.dim,
+		BackgroundColor3 = C.card, Size = UDim2.new(1, 0, 0, 30), AutoButtonColor = false,
+		BorderSizePixel = 0, LayoutOrder = i,
+	}, Rail)
+	corner(b, 8)
+	TabBtns[t[2]] = b
+	b.MouseEnter:Connect(function()
+		if activeTab ~= t[2] then b.BackgroundColor3 = C.hover end
 	end)
+	b.MouseLeave:Connect(function()
+		if activeTab ~= t[2] then b.BackgroundColor3 = C.card end
+	end)
+	b.MouseButton1Click:Connect(function() showTab(t[2]) end)
 end
 
--- estado
-local state = {
-	speed = 40, jumpHeight = 50, jumpOn = false, multiJump = 1,
+--========== ESTADO ==========
+local S = {
+	speed = 40, jumpH = 50, jumpOn = false, multi = 1,
 	god = false, infJump = false, noclip = false,
-	fly = false, flySpeed = 70, flyVert = 60, flyLock = false, flyAccel = 0.35,
+	fly = false, flyH = 70, flyV = 60, flyLock = false, flyAcc = 0.35,
+	farm = false, farmRange = 120, fastAtk = false, autoHaki = false,
 }
+
 local function chr() return Player.Character end
 local function root()
 	local c = chr()
@@ -435,21 +619,21 @@ local function hum()
 	local c = chr()
 	return c and c:FindFirstChildOfClass("Humanoid")
 end
-local function gravity() return workspace.Gravity > 1 and workspace.Gravity or 196.2 end
+local function grav() return workspace.Gravity > 1 and workspace.Gravity or 196.2 end
 
 local godOld = {}
 local function applyStats()
 	local h = hum()
 	if not h then return end
-	h.WalkSpeed = state.speed
-	if state.jumpOn then
+	h.WalkSpeed = S.speed
+	if S.jumpOn then
 		if h.UseJumpPower then
-			h.JumpPower = math.clamp(math.sqrt(2 * gravity() * state.jumpHeight), 50, 1000)
+			h.JumpPower = math.clamp(math.sqrt(2 * grav() * S.jumpH), 50, 1000)
 		else
-			h.JumpHeight = state.jumpHeight
+			h.JumpHeight = S.jumpH
 		end
 	end
-	if state.god then
+	if S.god then
 		if not godOld[h] then godOld[h] = h.MaxHealth end
 		h.MaxHealth = 1e9
 		h.Health = h.MaxHealth
@@ -461,40 +645,41 @@ local function applyStats()
 end
 Run.Heartbeat:Connect(applyStats)
 
-local jumpCount = 0
-local function doJump()
+local jumpN = 0
+local function jump()
 	local h, r = hum(), root()
 	if not h or not r then return end
 	h:ChangeState(Enum.HumanoidStateType.Jumping)
 	local bv = new("BodyVelocity", {
 		MaxForce = Vector3.new(0, 1e5, 0),
-		Velocity = Vector3.new(r.AssemblyLinearVelocity.X, math.sqrt(2 * gravity() * state.jumpHeight), r.AssemblyLinearVelocity.Z),
-		Parent = r,
-	})
+		Velocity = Vector3.new(r.AssemblyLinearVelocity.X, math.sqrt(2 * grav() * S.jumpH), r.AssemblyLinearVelocity.Z),
+	}, r)
 	task.delay(0.25, function() if bv.Parent then bv:Destroy() end end)
 end
 UIS.JumpRequest:Connect(function()
-	if state.infJump then doJump() elseif state.multiJump > 1 and jumpCount > 0 then
-		jumpCount -= 1
-		doJump()
+	if S.infJump then
+		jump()
+	elseif S.multi > 1 and jumpN > 0 then
+		jumpN -= 1
+		jump()
 	end
 end)
 Player.CharacterAdded:Connect(function(c)
 	task.wait(1)
-	state.fly = false
+	S.fly = false
 	local h = c:WaitForChild("Humanoid", 8)
 	if h then
-		h.StateChanged:Connect(function(s)
-			if s == Enum.HumanoidStateType.Landed then jumpCount = state.multiJump - 1 end
+		h.StateChanged:Connect(function(st)
+			if st == Enum.HumanoidStateType.Landed then jumpN = S.multi - 1 end
 		end)
 	end
 	applyStats()
 end)
 
--- rede
+--========== REDE ==========
 local function CommF()
-	local remotes = RS:FindFirstChild("Remotes")
-	return remotes and remotes:FindFirstChild("CommF_")
+	local rem = RS:FindFirstChild("Remotes")
+	return rem and rem:FindFirstChild("CommF_")
 end
 local function invoke(...)
 	local c = CommF()
@@ -503,20 +688,45 @@ local function invoke(...)
 	return a, b
 end
 
+--========== LOG ==========
+local logPage
+local function log(txt, kind)
+	local stamp = string.format("%02d:%02d", math.floor((os.clock() - startedAt) / 60), math.floor((os.clock() - startedAt) % 60))
+	table.insert(logLines, { stamp, tostring(txt), kind })
+	if #logLines > 70 then table.remove(logLines, 1) end
+	if logPage then
+		for _, c in ipairs(logPage:GetChildren()) do
+			if c:IsA("TextLabel") then c:Destroy() end
+		end
+		for i = #logLines, 1, -1 do
+			local l = logLines[i]
+			local col = C.dim
+			if l[3] == "ok" then col = C.good elseif l[3] == "bad" then col = C.bad end
+			local row = new("TextLabel", {
+				Text = l[1] .. "  " .. l[2], Font = Enum.Font.Code, TextSize = 10, TextColor3 = col,
+				BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 14), LayoutOrder = #logLines - i,
+				TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd,
+			}, logPage)
+			row.Name = "L" .. i
+		end
+	end
+end
+
+--========== PLACES ==========
 local PLACES = {
-	{ "Primeiro Mar", {
+	{ "Sea 1", {
 		{ "Fruit Dealer", Vector3.new(0, 5, 0) }, { "Marineford", Vector3.new(1000, 5, 2500) },
 		{ "Amazon Lily", Vector3.new(-3000, 5, 2500) }, { "Sky Island", Vector3.new(-7863, 5545, -378) },
 	} },
-	{ "Segundo Mar", {
+	{ "Sea 2", {
 		{ "Colosseum", Vector3.new(-5000, 5, 0) }, { "Cursed Ship", Vector3.new(0, 5, -4000) },
 		{ "Haunted Castle", Vector3.new(-3000, 5, -4000) }, { "Café", Vector3.new(-386, 74, -314) },
 	} },
-	{ "Terceiro Mar", {
+	{ "Sea 3", {
 		{ "Egghead", Vector3.new(6000, 5, 6000) }, { "Mansion", Vector3.new(6000, 5, -6000) },
 		{ "Hydra", Vector3.new(-8000, 5, 0) }, { "Great Tree", Vector3.new(-1055, 328, -8916) },
 	} },
-	{ "Admin / Dev", {
+	{ "Admin", {
 		{ "Admin Island", Vector3.new(0, 5, -10000) }, { "Admin Room", Vector3.new(0, 5, -12500) },
 		{ "Dev Room", Vector3.new(0, 1000, -15000) }, { "Vazio", Vector3.new(0, 3000, 0) },
 	} },
@@ -524,64 +734,52 @@ local PLACES = {
 
 local function TP(pos, label)
 	local r = root()
-	if not r then return Notify("Sem personagem", true) end
-	if (r.Position - pos).Magnitude > 3000 then
-		invoke("requestEntrance", pos)
-		task.wait(0.5)
+	if not r then
+		Notify("sem personagem", "bad")
+		log("TP falhou: sem personagem", "bad")
+		return
 	end
+	setPill("teleport", "busy")
+	if (r.Position - pos).Magnitude > 3000 then invoke("requestEntrance", pos); task.wait(0.45) end
 	r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
-	Notify("→ " .. (label or "Destino"))
+	log("TP → " .. (label or "?"), "ok")
+	setPill("ok", "ok")
 end
 
--- frutas
-local FRUIT_GROUPS = {
+--========== FRUTAS ==========
+local GROUPS = {
 	{ "Comum", { "Rocket", "Kilo", "Spin", "Blade", "Chop", "Spring", "Bomb", "Spike" } },
-	{ "Incomum / Rara", {
-		"Diamond", "Revive", "Rubber", "Ghost", "Barrier", "Creation", "Door", "Portal",
-		"Smoke", "Flame", "Ice", "Sand", "Dark", "Light", "Falcon", "Eagle",
-	} },
-	{ "Lendária", {
-		"Quake", "Love", "Spider", "String", "Sound", "Pain", "Paw", "Magma",
-		"Lightning", "Rumble", "Blizzard", "Buddha", "Phoenix",
-	} },
-	{ "Mítica / Nova", {
-		"Gravity", "Shadow", "Venom", "Spirit", "Soul", "Control", "Dough", "Gas",
-		"Hellfire (Gas)", "Mammoth", "T-Rex", "Leopard", "Tiger", "Yeti", "Kitsune",
-		"Dragon", "Dragon (Classic)", "Magnet", "Empyrean (Kitsune)", "Fiend (Yeti)",
-		"Werewolf (Tiger)", "Celestial", "Oni", "Meme",
-	} },
+	{ "Rara", { "Diamond", "Revive", "Rubber", "Ghost", "Barrier", "Creation", "Door", "Portal", "Smoke", "Flame", "Ice", "Sand", "Dark", "Light", "Falcon", "Eagle" } },
+	{ "Lendária", { "Quake", "Love", "Spider", "String", "Sound", "Pain", "Paw", "Magma", "Lightning", "Rumble", "Blizzard", "Buddha", "Phoenix" } },
+	{ "Mítica", { "Gravity", "Shadow", "Venom", "Spirit", "Soul", "Control", "Dough", "Gas", "Hellfire (Gas)", "Mammoth", "T-Rex", "Leopard", "Tiger", "Yeti", "Kitsune", "Dragon", "Dragon (Classic)", "Magnet", "Empyrean (Kitsune)", "Fiend (Yeti)", "Werewolf (Tiger)", "Celestial", "Oni", "Meme" } },
 }
 local ALIAS = {
-	Rocket = "Kilo", Kilo = "Rocket", Blade = "Chop", Chop = "Blade",
-	Portal = "Door", Door = "Portal", Lightning = "Rumble", Rumble = "Lightning",
-	Spirit = "Soul", Soul = "Spirit", Spider = "String", String = "Spider",
-	Tiger = "Leopard", Leopard = "Tiger", Creation = "Barrier", Barrier = "Creation",
-	Eagle = "Falcon", Falcon = "Eagle",
+	Rocket = "Kilo", Kilo = "Rocket", Blade = "Chop", Chop = "Blade", Portal = "Door",
+	Door = "Portal", Lightning = "Rumble", Rumble = "Lightning", Spirit = "Soul",
+	Soul = "Spirit", Spider = "String", String = "Spider", Tiger = "Leopard",
+	Leopard = "Tiger", Creation = "Barrier", Barrier = "Creation", Eagle = "Falcon",
+	Falcon = "Eagle",
 }
-local fruitMode = "physical"
+local mode = "physical"
 local spawned = {}
-local function cleanName(n) return (n:gsub("%s*%b()", "")) end
+local cache = {}
 
-local templateCache = {}
-local function findTemplate(name)
-	local base = cleanName(name)
-	if templateCache[base] then
-		local c = templateCache[base]
-		if c and c.Parent then return c end
-		templateCache[base] = nil
-	end
+local function clean(n) return (n:gsub("%s*%b()", "")) end
+
+local function findTmpl(name)
+	local base = clean(name)
+	local c = cache[base]
+	if c and c.Parent then return c end
 	local raw = { name, base, base .. " Fruit", base .. "-" .. base, base .. "-" .. base .. " Fruit" }
 	if ALIAS[base] then
 		local a = ALIAS[base]
-		for _, v in ipairs({ a, a .. " Fruit", a .. "-" .. a, a .. "-" .. a .. " Fruit" }) do
-			table.insert(raw, v)
-		end
+		for _, v in ipairs({ a, a .. " Fruit", a .. "-" .. a }) do table.insert(raw, v) end
 	end
 	local keys = {}
 	for _, k in ipairs(raw) do keys[k:lower()] = true end
 	local found
-	for _, container in ipairs({ RS, workspace }) do
-		for _, d in ipairs(container:GetDescendants()) do
+	for _, cont in ipairs({ RS, workspace }) do
+		for _, d in ipairs(cont:GetDescendants()) do
 			if (d:IsA("Tool") or d:IsA("Model")) and keys[d.Name:lower()] then
 				found = d
 				break
@@ -589,68 +787,91 @@ local function findTemplate(name)
 		end
 		if found then break end
 	end
-	if found then templateCache[base] = found end
+	if found then cache[base] = found end
 	return found
 end
 
 local function spawnAt(name, angle, radius)
-	local tmpl = findTemplate(name)
-	if not tmpl then return false end
-	if #spawned > 130 then
+	local t = findTmpl(name)
+	if not t then return false end
+	if #spawned > 140 then
 		local o = table.remove(spawned, 1)
 		if o and o.Parent then o:Destroy() end
 	end
 	local r = root()
 	local cf = r and (r.CFrame * CFrame.new(math.cos(angle) * radius, 4, math.sin(angle) * radius)) or CFrame.new(0, 80, 0)
-	local clone = tmpl:Clone()
-	clone.Name = cleanName(name) .. " Fruit"
-	if clone:IsA("Model") then
-		for _, p in ipairs(clone:GetDescendants()) do
+	local cl = t:Clone()
+	cl.Name = clean(name) .. " Fruit"
+	if cl:IsA("Model") then
+		for _, p in ipairs(cl:GetDescendants()) do
 			if p:IsA("BasePart") then
 				p.Anchored = false
 				p.CanCollide = true
 			end
 		end
-		clone.Parent = workspace
-		if clone.PrimaryPart then clone:PivotTo(cf)
-		else
-			local f = clone:FindFirstChildWhichIsA("BasePart")
+		cl.Parent = workspace
+		if cl.PrimaryPart then cl:PivotTo(cf) else
+			local f = cl:FindFirstChildWhichIsA("BasePart")
 			if f then f.CFrame = cf end
 		end
 	else
-		local hnd = clone:FindFirstChild("Handle") or clone:FindFirstChildWhichIsA("BasePart")
-		clone.Parent = workspace
-		if hnd then
-			hnd.Anchored = false
-			hnd.CanCollide = true
-			hnd.CFrame = cf
+		local h = cl:FindFirstChild("Handle") or cl:FindFirstChildWhichIsA("BasePart")
+		cl.Parent = workspace
+		if h then
+			h.Anchored = false
+			h.CanCollide = true
+			h.CFrame = cf
 		end
 	end
 	new("Highlight", {
-		FillTransparency = 0.72, OutlineTransparency = 0.1,
-		FillColor3 = C.accent, OutlineColor3 = C.accent, Parent = clone,
-	})
-	table.insert(spawned, clone)
+		FillTransparency = 0.75, OutlineTransparency = 0.05,
+		FillColor3 = C.violet, OutlineColor3 = C.cyan,
+	}, cl)
+	table.insert(spawned, cl)
 	return true
 end
 
-local function fruitAction(name)
-	if fruitMode == "real" then
-		local good = invoke("BuyFruit", cleanName(name) .. "-" .. cleanName(name))
-		invoke("LoadFruit", cleanName(name))
-		return Notify(good and ("Servidor: " .. name) or ("Falha: " .. name), not good)
+local function oneFruit(name)
+	if mode == "real" then
+		local okBuy = invoke("BuyFruit", clean(name) .. "-" .. clean(name))
+		invoke("LoadFruit", clean(name))
+		log((okBuy and "servidor: " or "falhou: ") .. name, okBuy and "ok" or "bad")
+		return Notify(okBuy and ("servidor: " .. name) or ("falhou: " .. name), okBuy and "good" or "bad")
 	end
 	if spawnAt(name, math.random() * math.pi * 2, 9) then
-		Notify("Spawn: " .. name)
+		counters.spawnOk += 1
+		log("spawn: " .. name, "ok")
+		setPill("spawn ok", "ok")
+		Notify("spawn: " .. name, "good")
 	else
-		invoke("LoadFruit", cleanName(name))
-		Notify("Sem modelo: " .. name .. " → inventário", true)
+		counters.spawnFail += 1
+		invoke("LoadFruit", clean(name))
+		log("sem modelo: " .. name, "bad")
+		setPill("falhou", "bad")
+		Notify("sem modelo: " .. name, "bad")
 	end
 end
 
--- ESP
-local esp = { on = false, box = true, name = true, hp = true, skel = true, tracer = true, fruit = false, team = false }
-local espCache = {}
+local function groupSpawn(list, label)
+	if not root() then return Notify("sem personagem", "bad") end
+	counters.groups += 1
+	setPill("spawnando", "busy")
+	local okc = 0
+	for i, n in ipairs(list) do
+		if spawnAt(n, (i / math.max(#list, 1)) * math.pi * 2, 16) then okc += 1 end
+	end
+	local miss = #list - okc
+	counters.spawnOk += okc
+	counters.spawnFail += miss
+	if miss > 0 then counters.groupsFail += 1 end
+	log((label or "grupo") .. ": " .. okc .. "/" .. #list .. " ok", miss == 0 and "ok" or "bad")
+	setPill(okc .. "/" .. #list .. " ok", miss == 0 and "ok" or "bad")
+	Notify((label or "grupo") .. " · " .. okc .. "/" .. #list, miss == 0 and "good" or "bad")
+end
+
+--========== ESP ==========
+local E = { on = false, box = true, name = true, hp = true, skel = true, line = true, fruit = false, team = false }
+local ec = {}
 local BONES = {
 	{ "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" },
 	{ "UpperTorso", "LeftUpperArm" }, { "LeftUpperArm", "LeftLowerArm" }, { "LeftLowerArm", "LeftHand" },
@@ -660,73 +881,73 @@ local BONES = {
 	{ "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" },
 	{ "Torso", "Left Leg" }, { "Torso", "Right Leg" },
 }
+
 local function clearEsp()
-	for c, d in pairs(espCache) do
+	for t, d in pairs(ec) do
 		if d.box then d.box:Destroy() end
 		if d.bill then d.bill:Destroy() end
-		if d.tracer then d.tracer:Destroy() end
-		if d.lines then for _, l in ipairs(d.lines) do l:Destroy() end end
+		if d.line then d.line:Destroy() end
+		for _, l in ipairs(d.lines) do l:Destroy() end
 	end
-	espCache = {}
+	ec = {}
 end
+
 local function buildEsp(t, plr)
-	if espCache[t] then return end
-	local hrp = t:FindFirstChild("HumanoidRootPart") or t:FindFirstChild("Torso")
-		or t:FindFirstChild("UpperTorso") or t:FindFirstChildWhichIsA("BasePart")
+	if ec[t] then return end
+	local hrp = t:FindFirstChild("HumanoidRootPart") or t:FindFirstChild("Torso") or t:FindFirstChildWhichIsA("BasePart")
 	local h = t:FindFirstChildOfClass("Humanoid")
 	local head = t:FindFirstChild("Head") or hrp
 	local c = cam()
 	if not hrp or not c then return end
-	local col = Color3.fromRGB(255, 90, 90)
+	local col = Color3.fromRGB(255, 92, 104)
 	if plr and plr.Team then col = plr.Team.TeamColor.Color end
 	local d = { lines = {} }
-	if esp.box then
+	if E.box then
 		d.box = new("BoxHandleAdornment", {
 			Size = Vector3.new(4, 5.4, 2), AlwaysOnTop = true, ZIndex = 5,
-			Transparency = 0.4, Color3 = col, Adornee = hrp, Parent = hrp,
-		})
+			Transparency = 0.45, Color3 = col, Adornee = hrp,
+		}, hrp)
 	end
-	if (esp.name or esp.hp) and head then
+	if (E.name or E.hp) and head then
 		d.bill = new("BillboardGui", {
-			Size = UDim2.new(0, 130, 0, 40), StudsOffset = Vector3.new(0, 2.6, 0),
-			AlwaysOnTop = true, Adornee = head, Parent = head,
-		})
-		if esp.name then
-			d.label = new("TextLabel", {
+			Size = UDim2.fromOffset(140, 42), StudsOffset = Vector3.new(0, 2.6, 0),
+			AlwaysOnTop = true, Adornee = head,
+		}, head)
+		if E.name then
+			d.lbl = new("TextLabel", {
 				Text = t.Name, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = Color3.new(1, 1, 1),
-				TextStrokeTransparency = 0.4, BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, 15), Parent = d.bill,
-			})
+				TextStrokeTransparency = 0.4, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 15),
+			}, d.bill)
 		end
-		if esp.hp then
+		if E.hp then
 			local bg = new("Frame", {
-				Size = UDim2.new(0.8, 0, 0, 5), Position = UDim2.new(0.1, 0, 0, 17),
-				BackgroundColor3 = Color3.fromRGB(20, 20, 20), BorderSizePixel = 0, Parent = d.bill,
-			})
+				Size = UDim2.new(0.8, 0, 0, 5), Position = UDim2.fromOffset(14, 17),
+				BackgroundColor3 = Color3.fromRGB(18, 18, 22), BorderSizePixel = 0,
+			}, d.bill)
 			corner(bg, 2)
-			d.fill = new("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.good, BorderSizePixel = 0, Parent = bg })
+			d.fill = new("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.good, BorderSizePixel = 0 }, bg)
 			corner(d.fill, 2)
 		end
 	end
-	if esp.skel and h then
+	if E.skel and h then
 		for i = 1, #BONES do
 			d.lines[i] = new("LineHandleAdornment", {
-				Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 6,
-				Adornee = hrp, Parent = c, Length = 0,
-			})
+				Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 6, Adornee = hrp, Length = 0,
+			}, c)
 		end
 	end
-	if esp.tracer and head then
-		d.tracer = new("LineHandleAdornment", {
-			Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 4, Parent = c, Length = 0,
-		})
+	if E.line and head then
+		d.line = new("LineHandleAdornment", {
+			Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 4, Length = 0,
+		}, c)
 	end
-	espCache[t] = d
+	ec[t] = d
 end
-local function updateEsp()
+
+local function tickEsp()
 	local c = cam()
 	if not c then return end
-	for t, d in pairs(espCache) do
+	for t, d in pairs(ec) do
 		if not t.Parent then
 			clearEsp()
 			break
@@ -741,88 +962,89 @@ local function updateEsp()
 			d.fill.Size = UDim2.new(ratio, 0, 1, 0)
 			d.fill.BackgroundColor3 = C.bad:Lerp(C.good, ratio)
 		end
-		if d.label and head then
-			d.label.Text = t.Name .. "  [" .. math.floor((c.CFrame.Position - head.Position).Magnitude) .. "]"
+		if d.lbl and head then
+			d.lbl.Text = t.Name .. "  [" .. math.floor((c.CFrame.Position - head.Position).Magnitude) .. "]"
 		end
 		if hrp then
 			for i, bn in ipairs(BONES) do
-				local line = d.lines[i]
-				if line then
+				local ln = d.lines[i]
+				if ln then
 					local a, b = t:FindFirstChild(bn[1]), t:FindFirstChild(bn[2])
 					if a and b then
-						line.Length = (a.Position - b.Position).Magnitude
-						line.CFrame = CFrame.new((a.Position + b.Position) / 2, b.Position)
+						ln.Length = (a.Position - b.Position).Magnitude
+						ln.CFrame = CFrame.new((a.Position + b.Position) / 2, b.Position)
 					else
-						line.Length = 0
+						ln.Length = 0
 					end
 				end
 			end
-			if d.tracer and head then
+			if d.line and head then
 				local o = c.CFrame.Position + c.CFrame.LookVector * 2 + c.CFrame.UpVector * -1.4
-				d.tracer.Length = (o - head.Position).Magnitude
-				d.tracer.CFrame = CFrame.new((o + head.Position) / 2, head.Position)
+				d.line.Length = (o - head.Position).Magnitude
+				d.line.CFrame = CFrame.new((o + head.Position) / 2, head.Position)
 			end
 		end
 	end
 end
+
 Run.RenderStepped:Connect(function()
-	if not esp.on then return end
+	if not E.on then return end
 	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr ~= Player and plr.Character then
-			if not (esp.team and plr.Team == Player.Team) then
-				local h = plr.Character:FindFirstChildOfClass("Humanoid")
-				if h and h.Health > 0 then buildEsp(plr.Character, plr) end
-			end
+		if plr ~= Player and plr.Character and not (E.team and plr.Team == Player.Team) then
+			local h = plr.Character:FindFirstChildOfClass("Humanoid")
+			if h and h.Health > 0 then buildEsp(plr.Character, plr) end
 		end
 	end
-	if esp.fruit then
-		for _, obj in ipairs(workspace:GetChildren()) do
-			if obj.Name:find("Fruit") and not obj:FindFirstChildOfClass("Humanoid") then buildEsp(obj, nil) end
+	if E.fruit then
+		for _, o in ipairs(workspace:GetChildren()) do
+			if o.Name:find("Fruit") and not o:FindFirstChildOfClass("Humanoid") then buildEsp(o, nil) end
 		end
 	end
-	updateEsp()
+	tickEsp()
 end)
 
--- aimbot
-local aim = { on = false, fov = 150, smooth = 0.22, predict = false, team = true }
-local fovCircle = new("Frame", {
+--========== AIMBOT ==========
+local A = { on = false, fov = 150, smooth = 0.22, predict = false, team = true }
+local ring = new("Frame", {
 	AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0),
-	Size = UDim2.new(0, aim.fov * 2, 0, aim.fov * 2), BackgroundTransparency = 1,
-	Visible = false, Parent = Gui,
-})
-corner(fovCircle, 9999)
-stroke(fovCircle, C.accent, 1, 0.55)
+	Size = UDim2.fromOffset(A.fov * 2, A.fov * 2), BackgroundTransparency = 1, Visible = false,
+	ZIndex = 10,
+}, Gui)
+corner(ring, 9999)
+stroke(ring, C.violet, 1, 0.5)
+
 Run.RenderStepped:Connect(function()
-	if not aim.on then return end
+	if not A.on then return end
 	local c = cam()
-	local r = root()
-	if not c or not r then return end
-	local center = c.ViewportSize / 2
-	local best, bestD
+	if not c or not root() then return end
+	local mid = c.ViewportSize / 2
+	local best, bd
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= Player and plr.Character then
 			local h = plr.Character:FindFirstChildOfClass("Humanoid")
 			local hd = plr.Character:FindFirstChild("Head")
-			if h and hd and h.Health > 0 and not (aim.team and plr.Team == Player.Team) then
+			if h and hd and h.Health > 0 and not (A.team and plr.Team == Player.Team) then
 				local sp, vis = c:WorldToViewportPoint(hd.Position)
 				if vis then
-					local dist = (Vector2.new(sp.X, sp.Y) - center).Magnitude
-					if dist < aim.fov and (not bestD or dist < bestD) then best, bestD = hd, dist end
+					local dist = (Vector2.new(sp.X, sp.Y) - mid).Magnitude
+					if dist < A.fov and (not bd or dist < bd) then
+						best, bd = hd, dist
+					end
 				end
 			end
 		end
 	end
 	if best then
-		local target = best.Position
-		if aim.predict then target = target + best.AssemblyLinearVelocity * 0.14 end
-		c.CFrame = c.CFrame:Lerp(CFrame.new(c.CFrame.Position, target), aim.smooth)
+		local tp = best.Position
+		if A.predict then tp = tp + best.AssemblyLinearVelocity * 0.14 end
+		c.CFrame = c.CFrame:Lerp(CFrame.new(c.CFrame.Position, tp), A.smooth)
 	end
 end)
 
--- voo
-local flyBV, flyConn, flyUp, flyDown, lockY = nil, nil, false, false, nil
+--========== VOO / NOCLIP ==========
+local flyBV, flyConn, upHeld, downHeld, lockY
 local function setFly(on)
-	state.fly = on
+	S.fly = on
 	local r, h = root(), hum()
 	if flyConn then flyConn:Disconnect(); flyConn = nil end
 	if flyBV then flyBV:Destroy(); flyBV = nil end
@@ -831,36 +1053,39 @@ local function setFly(on)
 		lockY = nil
 		return
 	end
-	if not r then state.fly = false; return Notify("Sem personagem", true) end
+	if not r then
+		S.fly = false
+		return Notify("sem personagem", "bad")
+	end
 	if h then h.PlatformStand = true end
-	lockY = state.flyLock and r.Position.Y or nil
-	flyBV = new("BodyVelocity", { MaxForce = Vector3.new(1e5, 1e5, 1e5), P = 8000, Velocity = Vector3.zero, Parent = r })
+	lockY = S.flyLock and r.Position.Y or nil
+	flyBV = new("BodyVelocity", { MaxForce = Vector3.new(1e5, 1e5, 1e5), P = 8000, Velocity = Vector3.zero }, r)
 	flyConn = Run.RenderStepped:Connect(function()
 		local c = cam()
 		local cc = chr()
 		local rr = cc and cc:FindFirstChild("HumanoidRootPart")
-		if not rr or not flyBV or not flyBV.Parent or not c then return end
+		if not rr or not c or not flyBV or not flyBV.Parent then return end
 		local dir = Vector3.zero
 		if UIS:IsKeyDown(Enum.KeyCode.W) then dir += c.CFrame.LookVector end
 		if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= c.CFrame.LookVector end
 		if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= c.CFrame.RightVector end
 		if UIS:IsKeyDown(Enum.KeyCode.D) then dir += c.CFrame.RightVector end
-		local vert = 0
-		if UIS:IsKeyDown(Enum.KeyCode.Space) or flyUp then vert += 1 end
-		if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.C) or flyDown then vert -= 1 end
-		local sp = state.flySpeed
+		local v = 0
+		if UIS:IsKeyDown(Enum.KeyCode.Space) or upHeld then v += 1 end
+		if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.C) or downHeld then v -= 1 end
+		local sp = S.flyH
 		if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then sp *= 2 end
 		local flat = Vector3.new(dir.X, 0, dir.Z)
 		if flat.Magnitude > 0 then flat = flat.Unit * sp end
-		local target = Vector3.new(flat.X, vert * state.flyVert, flat.Z)
-		if state.flyLock and lockY then target = Vector3.new(target.X, (lockY - rr.Position.Y) * 6, target.Z) end
-		flyBV.Velocity = flyBV.Velocity:Lerp(target, math.clamp(state.flyAccel, 0.05, 1))
+		local target = Vector3.new(flat.X, v * S.flyV, flat.Z)
+		if S.flyLock and lockY then target = Vector3.new(target.X, (lockY - rr.Position.Y) * 6, target.Z) end
+		flyBV.Velocity = flyBV.Velocity:Lerp(target, math.clamp(S.flyAcc, 0.05, 1))
 	end)
 end
 
 local noclipConn
 local function setNoclip(on)
-	state.noclip = on
+	S.noclip = on
 	if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
 	if not on then return end
 	noclipConn = Run.Stepped:Connect(function()
@@ -872,45 +1097,104 @@ local function setNoclip(on)
 	end)
 end
 
-local flyPad = new("Frame", {
-	Size = UDim2.new(0, 46, 0, 104), Position = UDim2.new(1, -62, 0.5, 40),
-	BackgroundTransparency = 1, Visible = false, Parent = Gui,
-})
-new("UIListLayout", { Padding = UDim.new(0, 6) }, flyPad)
-local function padBtn(txt, order, setter)
-	local b = new("TextButton", {
-		Text = txt, Font = Enum.Font.GothamBlack, TextSize = 16, TextColor3 = C.accent,
-		BackgroundColor3 = C.card, BackgroundTransparency = 0.15, Size = UDim2.new(1, 0, 0, 46),
-		LayoutOrder = order, AutoButtonColor = false, Parent = flyPad,
-	})
-	corner(b, 10)
-	stroke(b, C.accent, 1, 0.5)
-	b.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then setter(true) end
-	end)
-	b.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then setter(false) end
-	end)
+--========== FARM / ATAQUE ==========
+local function npcList()
+	local list = {}
+	for _, m in ipairs(workspace:GetDescendants()) do
+		if m:IsA("Model") and not m:IsDescendantOf(Players) then
+			local h = m:FindFirstChildOfClass("Humanoid")
+			local r = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChildWhichIsA("BasePart")
+			if h and r and h.Health > 0 and m ~= chr() then
+				local pl = Players:GetPlayerFromCharacter(m)
+				if not pl then table.insert(list, { m, r }) end
+			end
+		end
+	end
+	return list
 end
-padBtn("+", 1, function(v) flyUp = v end)
-padBtn("−", 2, function(v) flyDown = v end)
 
--- TELEPORT
+Run.Heartbeat:Connect(function()
+	if not S.farm then return end
+	local r = root()
+	local h = hum()
+	if not r or not h then return end
+	local best, bd
+	for _, e in ipairs(npcList()) do
+		local d = (e[2].Position - r.Position).Magnitude
+		if d < S.farmRange and (not bd or d < bd) then best, bd = e, d end
+	end
+	if not best then return end
+	if bd > 8 then
+		r.CFrame = CFrame.new(r.Position, Vector3.new(best[2].Position.X, r.Position.Y, best[2].Position.Z))
+		r.CFrame = r.CFrame + r.CFrame.LookVector * math.min(bd - 6, 14)
+	else
+		local tool = chr() and chr():FindFirstChildOfClass("Tool")
+		if tool then pcall(function() tool:Activate() end) end
+	end
+end)
+
+Run.Heartbeat:Connect(function()
+	if not S.fastAtk then return end
+	local c = chr()
+	local tool = c and c:FindFirstChildOfClass("Tool")
+	if tool then pcall(function() tool:Activate() end) end
+end)
+
+--========== FULLBRIGHT ==========
+local lightOld
+local function setBright(on)
+	if on then
+		if not lightOld then
+			lightOld = {
+				Ambient = Lighting.Ambient, Outdoor = Lighting.OutdoorAmbient,
+				Brightness = Lighting.Brightness, ClockTime = Lighting.ClockTime,
+				FogEnd = Lighting.FogEnd, Global = Lighting.GlobalShadows,
+			}
+		end
+		Lighting.Ambient = Color3.fromRGB(160, 160, 170)
+		Lighting.OutdoorAmbient = Color3.fromRGB(160, 160, 170)
+		Lighting.Brightness = 2
+		Lighting.ClockTime = 14
+		Lighting.FogEnd = 1e6
+		Lighting.GlobalShadows = false
+	elseif lightOld then
+		Lighting.Ambient = lightOld.Ambient
+		Lighting.OutdoorAmbient = lightOld.Outdoor
+		Lighting.Brightness = lightOld.Brightness
+		Lighting.ClockTime = lightOld.ClockTime
+		Lighting.FogEnd = lightOld.FogEnd
+		Lighting.GlobalShadows = lightOld.Global
+		lightOld = nil
+	end
+end
+
+--========== ANTI AFK ==========
+local antiAfk = false
+UIS.WindowFocused:Connect(function()
+	if not antiAfk then return end
+	local vu = game:GetService("VirtualUser")
+	pcall(function()
+		vu:CaptureController()
+		vu:ClickButton1(Vector2.new(50, 50))
+	end)
+end)
+
+--========== PÁGINAS ==========
 local tpPage = newPage("Teleport")
 for _, g in ipairs(PLACES) do
 	Section(tpPage, g[1])
-	local grid = Grid(tpPage, 2)
-	for _, e in ipairs(g[2]) do GridButton(grid, e[1], nil, function() TP(e[2], e[1]) end) end
+	local gr = Grid(tpPage, 2)
+	for _, e in ipairs(g[2]) do GridButton(gr, e[1], nil, function() TP(e[2], e[1]) end) end
 end
 Section(tpPage, "Jogadores")
-local playerGrid = Grid(tpPage, 2)
+local pGrid = Grid(tpPage, 2)
 local function refreshPlayers()
-	for _, c in ipairs(playerGrid:GetChildren()) do
+	for _, c in ipairs(pGrid:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
 	end
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= Player then
-			GridButton(playerGrid, plr.Name, nil, function()
+			GridButton(pGrid, plr.Name, nil, function()
 				local cc = plr.Character
 				local rr = cc and cc:FindFirstChild("HumanoidRootPart")
 				if rr then TP(rr.Position, plr.Name) end
@@ -919,97 +1203,100 @@ local function refreshPlayers()
 	end
 end
 refreshPlayers()
-Players.PlayerAdded:Connect(function() task.wait(0.5); refreshPlayers() end)
-Players.PlayerRemoving:Connect(function() task.wait(0.5); refreshPlayers() end)
+Players.PlayerAdded:Connect(function() task.wait(0.4); refreshPlayers() end)
+Players.PlayerRemoving:Connect(function() task.wait(0.4); refreshPlayers() end)
+Button(tpPage, "Trazer jogadores até mim", function()
+	local r = root()
+	if not r then return end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= Player and plr.Character then
+			local rr = plr.Character:FindFirstChild("HumanoidRootPart")
+			if rr then rr.CFrame = r.CFrame * CFrame.new(0, 0, -4) end
+		end
+	end
+	Notify("trouxe todos", "good")
+end)
 
--- SPAWN
 local spPage = newPage("Spawn")
 Section(spPage, "Modo")
-local modeRow = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Parent = spPage })
-new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }, modeRow)
-local modeBtns = {}
-for _, m in ipairs({ { "physical", "Físico" }, { "real", "Servidor" } }) do
+local mrow = new("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 }, spPage)
+new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 5) }, mrow)
+local mbtns = {}
+for _, m in ipairs({ { "physical", "físico" }, { "real", "servidor" } }) do
 	local b = new("TextButton", {
-		Text = m[2], Font = Enum.Font.GothamSemibold, TextSize = 11, TextColor3 = C.dim,
-		BackgroundColor3 = C.card, Size = UDim2.new(0.5, -3, 1, 0), AutoButtonColor = false, Parent = modeRow,
-	})
+		Text = m[2], Font = Enum.Font.GothamSemibold, TextSize = 10, TextColor3 = C.dim,
+		BackgroundColor3 = C.card, Size = UDim2.new(0.5, -3, 1, 0), AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, mrow)
 	corner(b, 6)
-	modeBtns[m[1]] = b
+	mbtns[m[1]] = b
 	b.MouseButton1Click:Connect(function()
-		fruitMode = m[1]
-		for k, btn in pairs(modeBtns) do
-			btn.TextColor3 = k == fruitMode and C.accent or C.dim
-			btn.BackgroundColor3 = k == fruitMode and C.hover or C.card
+		mode = m[1]
+		for k, bb in pairs(mbtns) do
+			bb.TextColor3 = k == mode and C.violet or C.dim
+			bb.BackgroundColor3 = k == mode and C.hover or C.card
 		end
 	end)
 end
-modeBtns.physical.TextColor3 = C.accent
-modeBtns.physical.BackgroundColor3 = C.hover
+mbtns.physical.TextColor3 = C.violet
+mbtns.physical.BackgroundColor3 = C.hover
 
-local allFruits = {}
-for _, g in ipairs(FRUIT_GROUPS) do
-	for _, n in ipairs(g[2]) do table.insert(allFruits, n) end
+local allF = {}
+for _, g in ipairs(GROUPS) do
+	for _, n in ipairs(g[2]) do table.insert(allF, n) end
 end
 Section(spPage, "Mapa de spawn")
-local searchBox = Input(spPage, "filtrar fruta", function() end)
-local spawnNodes = {}
-local function spawnCircle(list)
-	if not root() then return Notify("Sem personagem", true) end
-	local okCount = 0
-	for i, name in ipairs(list) do
-		if spawnAt(name, (i / math.max(#list, 1)) * math.pi * 2, 16) then okCount += 1 end
-	end
-	Notify("Spawn: " .. okCount .. "/" .. #list)
-end
-local function rebuildSpawn(filter)
-	for _, n in ipairs(spawnNodes) do n:Destroy() end
-	spawnNodes = {}
-	for _, g in ipairs(FRUIT_GROUPS) do
+local search = Input(spPage, "filtrar fruta", function() end)
+local nodes = {}
+local function rebuild(filter)
+	for _, n in ipairs(nodes) do n:Destroy() end
+	nodes = {}
+	for _, g in ipairs(GROUPS) do
 		local shown = {}
-		for _, name in ipairs(g[2]) do
-			if filter == "" or name:lower():find(filter:lower(), 1, true) then table.insert(shown, name) end
+		for _, n in ipairs(g[2]) do
+			if filter == "" or n:lower():find(filter:lower(), 1, true) then table.insert(shown, n) end
 		end
 		if #shown > 0 then
-			local head = new("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, Parent = spPage })
-			table.insert(spawnNodes, head)
+			local head = new("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1 }, spPage)
+			table.insert(nodes, head)
 			local b = new("TextButton", {
-				Text = g[1] .. "  ·  spawnar " .. #shown, Font = Enum.Font.GothamSemibold,
-				TextSize = 11, TextColor3 = C.accent, BackgroundColor3 = C.card,
-				Size = UDim2.new(1, 0, 1, 0), AutoButtonColor = false, Parent = head,
-			})
+				Text = g[1] .. "  ·  " .. #shown, Font = Enum.Font.GothamSemibold, TextSize = 10,
+				TextColor3 = C.violet, BackgroundColor3 = C.card, Size = UDim2.fromScale(1, 1),
+				AutoButtonColor = false, BorderSizePixel = 0,
+			}, head)
 			corner(b, 6)
-			b.MouseButton1Click:Connect(function() spawnCircle(shown) end)
-			local grid = Grid(spPage, 3, 26)
-			table.insert(spawnNodes, grid)
-			for _, name in ipairs(shown) do GridButton(grid, name, nil, function() fruitAction(name) end) end
+			b.MouseButton1Click:Connect(function() groupSpawn(shown, g[1]) end)
+			local gr = Grid(spPage, 3, 25)
+			table.insert(nodes, gr)
+			for _, n in ipairs(shown) do GridButton(gr, n, nil, function() oneFruit(n) end) end
 		end
 	end
 end
-rebuildSpawn("")
-searchBox:GetPropertyChangedSignal("Text"):Connect(function() rebuildSpawn(searchBox.Text) end)
+rebuild("")
+search:GetPropertyChangedSignal("Text"):Connect(function() rebuild(search.Text) end)
 
 Section(spPage, "Ações")
-Button(spPage, "Spawnar todas em círculo", function() spawnCircle(allFruits) end)
-Button(spPage, "Spawnar 10 aleatórias", function()
-	local pick = {}
-	for _ = 1, 10 do table.insert(pick, allFruits[math.random(1, #allFruits)]) end
-	spawnCircle(pick)
+Button(spPage, "Spawnar todas em círculo", function() groupSpawn(allF, "todas") end)
+Button(spPage, "10 aleatórias", function()
+	local p = {}
+	for _ = 1, 10 do table.insert(p, allF[math.random(1, #allF)]) end
+	groupSpawn(p, "aleatórias")
 end)
-Button(spPage, "Limpar frutas geradas", function()
+Button(spPage, "Limpar geradas", function()
 	for _, f in ipairs(spawned) do if f.Parent then f:Destroy() end end
 	spawned = {}
-	Notify("Cena limpa")
+	Notify("cena limpa", "good")
+	log("frutas limpas", "ok")
 end)
-Input(spPage, "fruta nova / personalizada", function(txt) fruitAction(txt) end)
+Input(spPage, "fruta nova / personalizada", function(t) oneFruit(t) end)
 
--- PLAYER
 local plPage = newPage("Player")
 Section(plPage, "Velocidade")
-Slider(plPage, "WalkSpeed", 16, 400, 40, function(v) state.speed = v end)
+Slider(plPage, "WalkSpeed", 16, 400, 40, function(v) S.speed = v end)
 Section(plPage, "Pulo")
-local jumpToggle
-jumpToggle = Toggle(plPage, "Aplicar altura", false, function(v)
-	state.jumpOn = v
+local jT
+jT = Toggle(plPage, "Aplicar altura", false, function(v)
+	S.jumpOn = v
 	if not v then
 		local h = hum()
 		if h then
@@ -1017,97 +1304,155 @@ jumpToggle = Toggle(plPage, "Aplicar altura", false, function(v)
 		end
 	end
 end)
-Slider(plPage, "Altura (studs)", 5, 400, 50, function(v) state.jumpHeight = v end)
+Slider(plPage, "Altura (studs)", 5, 400, 50, function(v) S.jumpH = v end)
 Slider(plPage, "Pulos por salto", 1, 10, 1, function(v)
-	state.multiJump = v
-	jumpCount = v - 1
+	S.multi = v
+	jumpN = v - 1
 end)
 Button(plPage, "Ativar pulo agora", function()
-	state.jumpOn = true
-	jumpToggle.set(true)
+	S.jumpOn = true
+	jT.set(true)
 	applyStats()
-	Notify("Altura " .. state.jumpHeight .. " studs")
+	log("pulo " .. S.jumpH .. " studs", "ok")
 end)
 Section(plPage, "Voo")
-local flyToggle
-flyToggle = Toggle(plPage, "Voo", false, function(v)
+local fT
+fT = Toggle(plPage, "Voo", false, function(v)
 	setFly(v)
 	flyPad.Visible = v
-	Notify(v and "Voo on" or "Voo off")
+	log(v and "voo on" or "voo off", "ok")
 end)
-Slider(plPage, "Velocidade horizontal", 10, 400, 70, function(v) state.flySpeed = v end)
-Slider(plPage, "Velocidade vertical", 10, 400, 60, function(v) state.flyVert = v end)
-Slider(plPage, "Suavidade", 5, 100, 35, function(v) state.flyAccel = v / 100 end)
-Toggle(plPage, "Travar altitude", false, function(v) state.flyLock = v end)
-Button(plPage, "Subir 100 studs", function()
+Slider(plPage, "Velocidade horizontal", 10, 400, 70, function(v) S.flyH = v end)
+Slider(plPage, "Velocidade vertical", 10, 400, 60, function(v) S.flyV = v end)
+Slider(plPage, "Suavidade", 5, 100, 35, function(v) S.flyAcc = v / 100 end)
+Toggle(plPage, "Travar altitude", false, function(v) S.flyLock = v end)
+Button(plPage, "Subir 100", function()
 	local r = root()
 	if r then r.CFrame = r.CFrame + Vector3.new(0, 100, 0) end
 end)
-Button(plPage, "Descer 100 studs", function()
+Button(plPage, "Descer 100", function()
 	local r = root()
 	if r then r.CFrame = r.CFrame - Vector3.new(0, 100, 0) end
 end)
 Section(plPage, "Movimento")
 Toggle(plPage, "Noclip", false, function(v) setNoclip(v) end)
-Toggle(plPage, "Pulo infinito", false, function(v) state.infJump = v end)
-Toggle(plPage, "God Mode", false, function(v)
-	state.god = v
-	applyStats()
-end)
-Section(plPage, "Personagem")
+Toggle(plPage, "Pulo infinito", false, function(v) S.infJump = v end)
+Toggle(plPage, "God Mode", false, function(v) S.god = v; applyStats() end)
 Button(plPage, "Curar", function()
 	local h = hum()
 	if h then h.Health = h.MaxHealth end
-	Notify("Curado")
 end)
-Button(plPage, "Resetar", function()
+Button(plPage, "Resetar personagem", function()
 	local h = hum()
 	if h then h.Health = 0 end
 end)
 
--- COMBATE
-local cbPage = newPage("Combate")
+local cbPage = newPage("Combat")
 Section(cbPage, "Aimbot")
 Toggle(cbPage, "Aimbot", false, function(v)
-	aim.on = v
-	fovCircle.Visible = v
+	A.on = v
+	ring.Visible = v
 end)
 Slider(cbPage, "FOV", 40, 600, 150, function(v)
-	aim.fov = v
-	fovCircle.Size = UDim2.new(0, v * 2, 0, v * 2)
+	A.fov = v
+	ring.Size = UDim2.fromOffset(v * 2, v * 2)
 end)
-Slider(cbPage, "Suavidade", 5, 100, 22, function(v) aim.smooth = v / 100 end)
-Toggle(cbPage, "Predição", false, function(v) aim.predict = v end)
-Toggle(cbPage, "Ignorar time", true, function(v) aim.team = v end)
+Slider(cbPage, "Suavidade", 5, 100, 22, function(v) A.smooth = v / 100 end)
+Toggle(cbPage, "Predição", false, function(v) A.predict = v end)
+Toggle(cbPage, "Ignorar time", true, function(v) A.team = v end)
+Section(cbPage, "Farm")
+Toggle(cbPage, "Auto farm (NPC)", false, function(v)
+	S.farm = v
+	log(v and "farm on" or "farm off", "ok")
+end)
+Slider(cbPage, "Alcance", 20, 400, 120, function(v) S.farmRange = v end)
+Toggle(cbPage, "Auto ataque", false, function(v) S.fastAtk = v end)
+Toggle(cbPage, "Auto haki", false, function(v)
+	S.autoHaki = v
+	if v then
+		invoke("BuyHaki", "Buso")
+		log("haki solicitado", "ok")
+	end
+end)
 
--- VISUAL
 local vsPage = newPage("Visual")
 Section(vsPage, "ESP")
 Toggle(vsPage, "ESP ativo", false, function(v)
-	esp.on = v
+	E.on = v
 	if not v then clearEsp() end
+	log(v and "esp on" or "esp off", "ok")
 end)
-Toggle(vsPage, "Caixa", true, function(v) esp.box = v; clearEsp() end)
-Toggle(vsPage, "Nome + distância", true, function(v) esp.name = v; clearEsp() end)
-Toggle(vsPage, "Vida", true, function(v) esp.hp = v; clearEsp() end)
-Toggle(vsPage, "Esqueleto", true, function(v) esp.skel = v; clearEsp() end)
-Toggle(vsPage, "Linha", true, function(v) esp.tracer = v; clearEsp() end)
-Toggle(vsPage, "Ignorar time", false, function(v) esp.team = v; clearEsp() end)
+Toggle(vsPage, "Caixa", true, function(v) E.box = v; clearEsp() end)
+Toggle(vsPage, "Nome + distância", true, function(v) E.name = v; clearEsp() end)
+Toggle(vsPage, "Vida", true, function(v) E.hp = v; clearEsp() end)
+Toggle(vsPage, "Esqueleto", true, function(v) E.skel = v; clearEsp() end)
+Toggle(vsPage, "Linha", true, function(v) E.line = v; clearEsp() end)
+Toggle(vsPage, "Ignorar time", false, function(v) E.team = v; clearEsp() end)
 Section(vsPage, "Objetos")
-Toggle(vsPage, "ESP de frutas", false, function(v) esp.fruit = v; clearEsp() end)
+Toggle(vsPage, "ESP de frutas", false, function(v) E.fruit = v; clearEsp() end)
+Section(vsPage, "Cena")
+Toggle(vsPage, "Full bright", false, function(v) setBright(v) end)
+Toggle(vsPage, "Anti AFK", false, function(v) antiAfk = v end)
 
--- ADMIN
+local stPage = newPage("Status")
+Section(stPage, "Servidor")
+local info = Card(stPage, 62)
+local iLbl = new("TextLabel", {
+	Text = "—", Font = Enum.Font.Code, TextSize = 10, TextColor3 = C.dim,
+	BackgroundTransparency = 1, Size = UDim2.new(1, -16, 1, -10), Position = UDim2.fromOffset(8, 5),
+	TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+}, info)
+Section(stPage, "Spawn")
+local countersCard = Card(stPage, 46)
+local cLbl = new("TextLabel", {
+	Text = "—", Font = Enum.Font.Code, TextSize = 10, TextColor3 = C.dim,
+	BackgroundTransparency = 1, Size = UDim2.new(1, -16, 1, -10), Position = UDim2.fromOffset(8, 5),
+	TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+}, countersCard)
+Section(stPage, "Log")
+local logHolder = new("Frame", { Size = UDim2.new(1, 0, 0, 250), BackgroundColor3 = C.card }, stPage)
+corner(logHolder, 8)
+pad(logHolder, 6, 6, 6, 8)
+logPage = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, logHolder)
+new("UIListLayout", { Padding = UDim.new(0, 1) }, logPage)
+
+task.spawn(function()
+	while Gui.Parent do
+		local ping = 0
+		pcall(function()
+			ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+		end)
+		local lvl, beli = "-", "-"
+		local data = Player:FindFirstChild("Data")
+		if data then
+			local l = data:FindFirstChild("Level")
+			local b = data:FindFirstChild("Beli")
+			if l then lvl = tostring(l.Value) end
+			if b then beli = tostring(b.Value) end
+		end
+		iLbl.Text = string.format(
+			"players  %d\nping     %d ms\nlevel    %s\nbeli     %s\nuptime   %ds",
+			#Players:GetPlayers(), ping, lvl, beli, math.floor(os.clock() - startedAt)
+		)
+		cLbl.Text = string.format(
+			"ok       %d\nfalhas   %d\ngrupos   %d\ngrupos falhos %d\ngeradas  %d",
+			counters.spawnOk, counters.spawnFail, counters.groups, counters.groupsFail, #spawned
+		)
+		task.wait(1)
+	end
+end)
+
 local adPage = newPage("Admin")
 Section(adPage, "Ilhas de admin")
-local adminGrid = Grid(adPage, 2)
-for _, e in ipairs(PLACES[4][2]) do GridButton(adminGrid, e[1], C.accent, function() TP(e[2], e[1]) end) end
+local aGrid = Grid(adPage, 2)
+for _, e in ipairs(PLACES[4][2]) do GridButton(aGrid, e[1], C.violet, function() TP(e[2], e[1]) end) end
 Section(adPage, "Haki / time")
-Button(adPage, "Buso Haki", function() invoke("BuyHaki", "Buso"); Notify("Buso") end)
-Button(adPage, "Kenbunshoku", function() invoke("BuyHaki", "Ken"); Notify("Ken") end)
-Button(adPage, "Geppo", function() invoke("BuyHaki", "Geppo"); Notify("Geppo") end)
-Button(adPage, "Soru", function() invoke("BuyHaki", "Soru"); Notify("Soru") end)
-Button(adPage, "Time Pirata", function() invoke("SetTeam", "Pirates"); Notify("Pirates") end)
-Button(adPage, "Time Marinha", function() invoke("SetTeam", "Marines"); Notify("Marines") end)
+Button(adPage, "Buso", function() invoke("BuyHaki", "Buso"); log("buso", "ok") end)
+Button(adPage, "Kenbunshoku", function() invoke("BuyHaki", "Ken"); log("ken", "ok") end)
+Button(adPage, "Geppo", function() invoke("BuyHaki", "Geppo"); log("geppo", "ok") end)
+Button(adPage, "Soru", function() invoke("BuyHaki", "Soru"); log("soru", "ok") end)
+Button(adPage, "Time Pirata", function() invoke("SetTeam", "Pirates"); log("time pirates", "ok") end)
+Button(adPage, "Time Marinha", function() invoke("SetTeam", "Marines"); log("time marines", "ok") end)
 Section(adPage, "Items")
 local ITEMS = {
 	"Dark Blade", "Cursed Dual Katana", "Saber", "Bisento", "Dragon Trident",
@@ -1116,44 +1461,112 @@ local ITEMS = {
 	"Katana", "Cutlass", "Trident", "Superhuman", "Godhuman", "Sanguine Art",
 }
 local function giveTool(name)
-	local tmpl = findTemplate(name)
-	if tmpl and tmpl:IsA("Tool") then
+	local t = findTmpl(name)
+	if t and t:IsA("Tool") then
 		local bp = Player:FindFirstChild("Backpack")
-		if not bp then return Notify("Sem backpack", true) end
-		tmpl:Clone().Parent = bp
-		return Notify("Item: " .. name)
+		if bp then
+			t:Clone().Parent = bp
+			log("item " .. name, "ok")
+			return Notify("item: " .. name, "good")
+		end
 	end
 	local good = invoke("BuyItem", name)
-	Notify(good and ("Servidor: " .. name) or ("Não achado: " .. name), not good)
+	log((good and "servidor: " or "não achado: ") .. name, good and "ok" or "bad")
+	Notify(good and ("servidor: " .. name) or ("não achado: " .. name), good and "good" or "bad")
 end
-local itemSearch = Input(adPage, "filtrar item", function() end)
-local itemGrid = Grid(adPage, 2)
-local function fillItems(filter)
-	for _, c in ipairs(itemGrid:GetChildren()) do
+local iSearch = Input(adPage, "filtrar item", function() end)
+local iGrid = Grid(adPage, 2)
+local function fillItems(f)
+	for _, c in ipairs(iGrid:GetChildren()) do
 		if c:IsA("TextButton") then c:Destroy() end
 	end
-	for _, name in ipairs(ITEMS) do
-		if filter == "" or name:lower():find(filter:lower(), 1, true) then
-			GridButton(itemGrid, name, nil, function() giveTool(name) end)
+	for _, n in ipairs(ITEMS) do
+		if f == "" or n:lower():find(f:lower(), 1, true) then
+			GridButton(iGrid, n, nil, function() giveTool(n) end)
 		end
 	end
 end
 fillItems("")
-itemSearch:GetPropertyChangedSignal("Text"):Connect(function() fillItems(itemSearch.Text) end)
-Input(adPage, "item personalizado", function(txt) giveTool(txt) end)
+iSearch:GetPropertyChangedSignal("Text"):Connect(function() fillItems(iSearch.Text) end)
+Input(adPage, "item personalizado", function(t) giveTool(t) end)
+Section(adPage, "Sessão")
+Button(adPage, "Rejoin", function()
+	pcall(function() Teleport:TeleportToPlaceInstance(game.PlaceId, game.JobId, Player) end)
+end)
+Button(adPage, "Server hop", function()
+	task.spawn(function()
+		local okH, body = pcall(function()
+			return game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?limit=100")
+		end)
+		if not okH or not body then return Notify("hop falhou", "bad") end
+		local okD, data = pcall(function() return Http:JSONDecode(body) end)
+		if not okD or not data or not data.data then return Notify("hop falhou", "bad") end
+		local pick
+		for _, s in ipairs(data.data) do
+			if s.playing < s.maxPlayers and s.id ~= game.JobId then
+				pick = s
+				break
+			end
+		end
+		if not pick then return Notify("nenhum servidor", "bad") end
+		pcall(function() Teleport:TeleportToPlaceInstance(game.PlaceId, pick.id, Player) end)
+		log("hop → " .. pick.id, "ok")
+	end)
+end)
+Button(adPage, "Copiar posição", function()
+	local r = root()
+	if not r then return end
+	local p = r.Position
+	local txt = string.format("Vector3.new(%d, %d, %d)", p.X, p.Y, p.Z)
+	if setclipboard then pcall(setclipboard, txt) end
+	Notify(txt)
+end)
 
--- abrir/fechar
-local function setOpen(open)
-	if open then
+--========== PAD DE VOO ==========
+local flyPad = new("Frame", {
+	Size = UDim2.fromOffset(46, 104), Position = UDim2.new(1, -62, 0.5, 40),
+	BackgroundTransparency = 1, Visible = false, ZIndex = 25,
+}, Gui)
+new("UIListLayout", { Padding = UDim.new(0, 6) }, flyPad)
+local function padBtn(txt, order, setter)
+	local b = new("TextButton", {
+		Text = txt, Font = Enum.Font.GothamBold, TextSize = 15, TextColor3 = C.violet,
+		BackgroundColor3 = C.card, BackgroundTransparency = 0.12,
+		Size = UDim2.new(1, 0, 0, 46), LayoutOrder = order, AutoButtonColor = false,
+		BorderSizePixel = 0,
+	}, flyPad)
+	corner(b, 10)
+	stroke(b, C.violet, 1, 0.4)
+	b.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			setter(true)
+		end
+	end)
+	b.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			setter(false)
+		end
+	end)
+end
+padBtn("+", 1, function(v) upHeld = v end)
+padBtn("−", 2, function(v) downHeld = v end)
+
+--========== ABRIR ==========
+local function open(on)
+	if on then
 		Win.Visible = true
-		Win.Size = UDim2.new(0, W, 0, H * 0.85)
-		Tween:Create(Win, TweenInfo.new(0.2, Enum.EasingStyle.Quint), { Size = UDim2.new(0, W, 0, H) }):Play()
+		Win.Size = UDim2.fromOffset(WW, math.floor(HH * 0.86))
+		Tween:Create(Win, TweenInfo.new(0.2, Enum.EasingStyle.Quint), { Size = UDim2.fromOffset(WW, HH) }):Play()
 	else
 		Win.Visible = false
 	end
 end
 Orb.MouseButton1Click:Connect(function()
-	if Win.Visible then Win.Visible = false else setOpen(true) end
+	if Win.Visible then
+		Win.Visible = false
+	else
+		open(true)
+	end
 end)
 UIS.InputBegan:Connect(function(i, gp)
 	if gp then return end
@@ -1163,12 +1576,20 @@ UIS.InputBegan:Connect(function(i, gp)
 end)
 
 showTab("Teleport")
-setOpen(true)
-task.wait(0.15)
-Notify("JDEV v3 online")
+open(true)
+probeLbl.Text = "ok"
+probeLbl.TextColor3 = C.good
+task.delay(2.2, function()
+	Tween:Create(probe, TweenInfo.new(0.3), { BackgroundTransparency = 1, Size = UDim2.fromOffset(150, 26) }):Play()
+	Tween:Create(probeLbl, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+end)
+
+log("painel iniciado", "ok")
+setPill("pronto", "ok")
+Notify("JDEV v4 online", "good")
 
 end)
 
 if not ok then
-	showError(err)
+	fail(err)
 end
