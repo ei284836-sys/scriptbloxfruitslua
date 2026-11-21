@@ -1,7 +1,7 @@
 --=====================================================================
---  JDEV ULTIMATE  •  LUNAR STYLE  •  CLEAN BUILD
---  Painel arrastável, abas isoladas, ESP estilo Free Fire, aimbot,
---  spawner físico de frutas/items e ilhas de admin.
+--  JDEV ULTIMATE  v2  •  LUNAR STYLE
+--  Build estável: sem erro de sintaxe, voo e pulo configuráveis,
+--  mapa de spawn com todas as frutas, ESP estilo Free Fire, aimbot.
 --=====================================================================
 local Players = game:GetService("Players")
 local RS      = game:GetService("ReplicatedStorage")
@@ -10,15 +10,18 @@ local Tween   = game:GetService("TweenService")
 local UIS     = game:GetService("UserInputService")
 
 local Player = Players.LocalPlayer
-local Cam    = workspace.CurrentCamera
+local PlayerGui = Player:WaitForChild("PlayerGui")
+local Cam = workspace.CurrentCamera or workspace:WaitForChild("CurrentCamera")
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	if workspace.CurrentCamera then Cam = workspace.CurrentCamera end
+end)
 
-local old = Player.PlayerGui:FindFirstChild("JDEV")
+local old = PlayerGui:FindFirstChild("JDEV")
 if old then old:Destroy() end
 
---==================== PALETA / HELPERS ================================
+--==================== PALETA ==========================================
 local C = {
 	bg     = Color3.fromRGB(11, 11, 14),
-	panel  = Color3.fromRGB(17, 17, 21),
 	card   = Color3.fromRGB(23, 23, 29),
 	hover  = Color3.fromRGB(33, 33, 42),
 	line   = Color3.fromRGB(38, 38, 48),
@@ -29,6 +32,7 @@ local C = {
 	bad    = Color3.fromRGB(255, 96, 96),
 }
 
+--==================== HELPERS =========================================
 local function new(class, props, parent)
 	local o = Instance.new(class)
 	for k, v in pairs(props) do o[k] = v end
@@ -41,17 +45,16 @@ local function stroke(o, col, t, tr)
 end
 
 local vp = Cam.ViewportSize
-local W  = math.clamp(vp.X - 56, 292, 396)
-local H  = math.clamp(vp.Y - 130, 330, 520)
+local W  = math.clamp(vp.X - 56, 292, 400)
+local H  = math.clamp(vp.Y - 130, 330, 540)
 
---==================== GUI RAIZ ========================================
+--==================== GUI =============================================
 local Gui = new("ScreenGui", {
 	Name = "JDEV", ResetOnSpawn = false, IgnoreGuiInset = true,
-	DisplayOrder = 999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	Parent = Player.PlayerGui,
+	DisplayOrder = 999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = PlayerGui,
 })
 
---==================== NOTIFICAÇÕES ====================================
+--==================== TOASTS ==========================================
 local toastHolder = new("Frame", {
 	Size = UDim2.new(0, 260, 1, -20), Position = UDim2.new(1, -280, 0, 10),
 	BackgroundTransparency = 1, Parent = Gui,
@@ -76,12 +79,12 @@ local function Notify(txt, bad)
 	})
 	corner(bar, 2)
 	new("TextLabel", {
-		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 12, TextColor3 = C.text,
+		Text = tostring(txt), Font = Enum.Font.GothamMedium, TextSize = 12, TextColor3 = C.text,
 		BackgroundTransparency = 1, Size = UDim2.new(1, -22, 1, 0), Position = UDim2.new(0, 16, 0, 0),
 		TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = card,
 	})
 	Tween:Create(card, TweenInfo.new(0.22, Enum.EasingStyle.Quint), { Size = UDim2.new(0, 236, 0, 30) }):Play()
-	task.delay(2.4, function()
+	task.delay(2.2, function()
 		Tween:Create(card, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
 		Tween:Create(bar, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
 		for _, d in ipairs(card:GetDescendants()) do
@@ -92,7 +95,7 @@ local function Notify(txt, bad)
 	end)
 end
 
---==================== DRAG UNIVERSAL ==================================
+--==================== DRAG ============================================
 local function draggable(frame, handle)
 	local dragging, dragInput, start, origin
 	handle.InputBegan:Connect(function(i)
@@ -117,15 +120,15 @@ local function draggable(frame, handle)
 	end)
 end
 
---==================== ORBE "J" ========================================
+--==================== ORBE J ==========================================
 local Orb = new("TextButton", {
 	Name = "Orb", Text = "", Size = UDim2.new(0, 46, 0, 46),
-	Position = UDim2.new(0, 16, 0.5, -23), BackgroundColor3 = C.panel,
+	Position = UDim2.new(0, 16, 0.5, -23), BackgroundColor3 = C.card,
 	AutoButtonColor = false, Parent = Gui,
 })
 corner(Orb, 23)
 stroke(Orb, C.accent, 1, 0.15)
-new("TextLabel", {
+local OrbLbl = new("TextLabel", {
 	Text = "J", Font = Enum.Font.GothamBlack, TextSize = 22, TextColor3 = C.accent,
 	BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0), Parent = Orb,
 })
@@ -139,17 +142,12 @@ local Win = new("Frame", {
 })
 corner(Win, 14)
 stroke(Win, C.line, 1, 0.2)
-
--- brilho superior
 new("Frame", {
 	Size = UDim2.new(1, 0, 0, 90), BackgroundColor3 = C.accent,
 	BackgroundTransparency = 0.93, BorderSizePixel = 0, Parent = Win,
 })
 
--- topbar
-local Top = new("Frame", {
-	Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, Parent = Win,
-})
+local Top = new("Frame", { Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, Parent = Win })
 draggable(Win, Top)
 
 local Badge = new("Frame", {
@@ -163,7 +161,7 @@ new("TextLabel", {
 })
 new("TextLabel", {
 	Text = "JDEV", Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = C.dim,
-	BackgroundTransparency = 1, Size = UDim2.new(0, 80, 0, 24), Position = UDim2.new(0, 42, 0, 9),
+	BackgroundTransparency = 1, Size = UDim2.new(0, 90, 0, 24), Position = UDim2.new(0, 42, 0, 9),
 	TextXAlignment = Enum.TextXAlignment.Left, Parent = Top,
 })
 
@@ -210,6 +208,20 @@ local function newPage(name)
 	return p
 end
 
+local function showTab(name)
+	for n, btn in pairs(TabBtns) do
+		btn.TextColor3 = C.dim
+		btn.BackgroundColor3 = C.card
+		if PageFrames[n] then PageFrames[n].Visible = false end
+	end
+	activeTab = name
+	if TabBtns[name] then
+		TabBtns[name].TextColor3 = C.accent
+		TabBtns[name].BackgroundColor3 = C.hover
+	end
+	if PageFrames[name] then PageFrames[name].Visible = true end
+end
+
 --==================== COMPONENTES =====================================
 local function Section(page, txt)
 	local holder = new("Frame", { Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1, Parent = page })
@@ -228,24 +240,35 @@ local function Button(page, txt, cb, accent)
 	})
 	corner(b, 8)
 	stroke(b, C.line, 1, 0.6)
-	local lbl = new("TextLabel", {
+	new("TextLabel", {
 		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 13,
 		TextColor3 = accent and C.accent or C.text, BackgroundTransparency = 1,
 		Size = UDim2.new(1, -18, 1, 0), Position = UDim2.new(0, 11, 0, 0),
 		TextXAlignment = Enum.TextXAlignment.Left, Parent = b,
 	})
-	b.MouseEnter:Connect(function()
-		Tween:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = C.hover }):Play()
-	end)
-	b.MouseLeave:Connect(function()
-		Tween:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = C.card }):Play()
-	end)
+	b.MouseEnter:Connect(function() Tween:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = C.hover }):Play() end)
+	b.MouseLeave:Connect(function() Tween:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = C.card }):Play() end)
 	b.MouseButton1Click:Connect(function()
 		Tween:Create(b, TweenInfo.new(0.08), { BackgroundColor3 = C.hover }):Play()
-		task.delay(0.1, function() if b.Parent then Tween:Create(b, TweenInfo.new(0.15), { BackgroundColor3 = C.card }):Play() end end)
+		task.delay(0.1, function()
+			if b.Parent then Tween:Create(b, TweenInfo.new(0.15), { BackgroundColor3 = C.card }):Play() end
+		end)
 		cb(b)
 	end)
-	return b, lbl
+	return b
+end
+
+local function GridButton(grid, txt, col, cb)
+	local b = new("TextButton", {
+		Text = txt, Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = col or C.text,
+		BackgroundColor3 = C.card, AutoButtonColor = false,
+		TextTruncate = Enum.TextTruncate.AtEnd, Parent = grid,
+	})
+	corner(b, 6)
+	b.MouseEnter:Connect(function() Tween:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = C.hover }):Play() end)
+	b.MouseLeave:Connect(function() Tween:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = C.card }):Play() end)
+	b.MouseButton1Click:Connect(function() cb(b) end)
+	return b
 end
 
 local function Toggle(page, txt, default, cb)
@@ -282,10 +305,10 @@ local function Toggle(page, txt, default, cb)
 	end
 
 	hit.MouseButton1Click:Connect(function() apply(not state) end)
-	return { set = apply, get = function() return state end, row = row }
+	return { set = apply, get = function() return state end }
 end
 
-local function Slider(page, txt, min, max, default, cb)
+local function Slider(page, txt, min, max, default, cb, step)
 	local row = new("Frame", { Size = UDim2.new(1, 0, 0, 48), BackgroundColor3 = C.card, Parent = page })
 	corner(row, 8)
 	stroke(row, C.line, 1, 0.6)
@@ -315,13 +338,14 @@ local function Slider(page, txt, min, max, default, cb)
 		alpha = math.clamp(alpha, 0, 1)
 		fill.Size = UDim2.new(alpha, 0, 1, 0)
 		knob.Position = UDim2.new(alpha, 0, 0.5, 0)
-		local val = math.floor(min + (max - min) * alpha + 0.5)
+		local val = min + (max - min) * alpha
+		if step then val = math.floor(val / step + 0.5) * step end
+		val = math.floor(val + 0.5)
 		lbl.Text = txt .. "  " .. tostring(val)
 		cb(val)
 	end
 	local function fromX(x)
-		local rel = (x - track.AbsolutePosition.X) / track.AbsoluteSize.X
-		set(rel)
+		set((x - track.AbsolutePosition.X) / track.AbsoluteSize.X)
 	end
 	track.InputBegan:Connect(function(i)
 		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
@@ -358,17 +382,17 @@ local function Input(page, placeholder, onSubmit)
 	return box
 end
 
-local function Grid(page, cols)
+local function Grid(page, cols, cellH)
 	local g = new("Frame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, Parent = page })
 	new("UIGridLayout", {
-		CellSize = UDim2.new(1 / cols, -4, 0, 30), CellPadding = UDim2.new(0, 4, 0, 4),
+		CellSize = UDim2.new(1 / cols, -4, 0, cellH or 30), CellPadding = UDim2.new(0, 4, 0, 4),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 	}, g)
 	return g
 end
 
---==================== ABAS DECLARADAS =================================
-local TABS = { "Teleport", "Frutas", "Player", "Combate", "Visual", "Admin" }
+--==================== CRIA ABAS =======================================
+local TABS = { "Teleport", "Spawn", "Player", "Combate", "Visual", "Admin" }
 for i, name in ipairs(TABS) do
 	local b = new("TextButton", {
 		Text = name, Font = Enum.Font.GothamSemibold, TextSize = 12, TextColor3 = C.dim,
@@ -379,34 +403,16 @@ for i, name in ipairs(TABS) do
 	corner(b, 7)
 	TabBtns[name] = b
 	b.MouseButton1Click:Connect(function()
-		if activeTab == name then return end
-		for n, btn in pairs(TabBtns) do
-			btn.TextColor3 = C.dim
-			btn.BackgroundColor3 = C.card
-			PageFrames[n].Visible = false
-		end
-		activeTab = name
-		b.TextColor3 = C.accent
-		b.BackgroundColor3 = C.hover
-		PageFrames[name].Visible = true
+		if activeTab ~= name then showTab(name) end
 	end)
 end
 
-local function showTab(name)
-	TabBtns[name]:MouseButton1Click? -- noop
-	for n, btn in pairs(TabBtns) do
-		btn.TextColor3 = C.dim
-		btn.BackgroundColor3 = C.card
-		PageFrames[n].Visible = false
-	end
-	activeTab = name
-	TabBtns[name].TextColor3 = C.accent
-	TabBtns[name].BackgroundColor3 = C.hover
-	PageFrames[name].Visible = true
-end
-
---==================== ESTADO DO PLAYER ================================
-local state = { speed = 16, jump = 50, god = false, infJump = false, noclip = false, fly = false, flySpeed = 60 }
+--==================== ESTADO ==========================================
+local state = {
+	speed = 40, jumpHeight = 50, jumpOn = false, multiJump = 1,
+	god = false, infJump = false, noclip = false,
+	fly = false, flySpeed = 70, flyVert = 60, flyLock = false, flyAccel = 0.35,
+}
 
 local function char() return Player.Character end
 local function root()
@@ -418,61 +424,120 @@ local function hum()
 	return c and c:FindFirstChildOfClass("Humanoid")
 end
 
+local godOld = {}
 local function applyStats()
 	local h = hum()
-	if h then
-		h.WalkSpeed = state.speed
-		if h.UseJumpPower then h.JumpPower = state.jump else h.JumpHeight = state.jump / 3.2 end
-		if state.god then
-			h.MaxHealth = math.huge
-			h.Health = h.MaxHealth
+	if not h then return end
+	h.WalkSpeed = state.speed
+	if state.jumpOn then
+		local g = workspace.Gravity > 1 and workspace.Gravity or 196.2
+		if h.UseJumpPower then
+			h.JumpPower = math.clamp(math.sqrt(2 * g * state.jumpHeight), 50, 1000)
+		else
+			h.JumpHeight = state.jumpHeight
 		end
+	end
+	if state.god then
+		if not godOld[h] then godOld[h] = h.MaxHealth end
+		h.MaxHealth = 1e9
+		h.Health = h.MaxHealth
+	elseif godOld[h] then
+		h.MaxHealth = godOld[h]
+		h.Health = math.min(h.Health, h.MaxHealth)
+		godOld[h] = nil
 	end
 end
 Run.Heartbeat:Connect(applyStats)
 
-Player.CharacterAdded:Connect(function()
-	task.wait(1.2)
+--==================== PULO ============================================
+local jumpCount = 0
+local function resetJump()
+	local h = hum()
+	if h then
+		jumpCount = math.max(0, state.multiJump - 1)
+	end
+end
+
+local function doJump()
+	local h = hum()
+	local r = root()
+	if not h or not r then return end
+	h:ChangeState(Enum.HumanoidStateType.Jumping)
+	local boost = math.sqrt(2 * (workspace.Gravity > 1 and workspace.Gravity or 196.2) * state.jumpHeight)
+	local bv = Instance.new("BodyVelocity")
+	bv.MaxForce = Vector3.new(0, 1e5, 0)
+	bv.Velocity = Vector3.new(r.AssemblyLinearVelocity.X, boost, r.AssemblyLinearVelocity.Z)
+	bv.Parent = r
+	task.delay(0.25, function() if bv.Parent then bv:Destroy() end end)
+end
+
+UIS.JumpRequest:Connect(function()
+	if state.infJump then doJump(); return end
+	if state.multiJump > 1 and jumpCount > 0 then
+		jumpCount -= 1
+		doJump()
+	end
+end)
+
+Player.CharacterAdded:Connect(function(c)
+	task.wait(1)
 	state.fly = false
+	local h = c:WaitForChild("Humanoid", 8)
+	if h then
+		h.StateChanged:Connect(function(s)
+			if s == Enum.HumanoidStateType.Landed or s == Enum.HumanoidStateType.Running then
+				jumpCount = state.multiJump - 1
+			end
+		end)
+	end
 	applyStats()
 end)
 
---==================== TELEPORTES (EDITÁVEL) ===========================
+--==================== TELEPORTES ======================================
 local PLACES = {
-	["Primeiro Mar"] = {
+	{ "Primeiro Mar", {
 		{ "Fruit Dealer", Vector3.new(0, 5, 0) },
 		{ "Marineford", Vector3.new(1000, 5, 2500) },
 		{ "Amazon Lily", Vector3.new(-3000, 5, 2500) },
 		{ "Sky Island", Vector3.new(-7863, 5545, -378) },
 		{ "Holy Tower", Vector3.new(0, 2000, 4500) },
-	},
-	["Segundo Mar"] = {
+	} },
+	{ "Segundo Mar", {
 		{ "Colosseum", Vector3.new(-5000, 5, 0) },
 		{ "Cursed Ship", Vector3.new(0, 5, -4000) },
 		{ "Haunted Castle", Vector3.new(-3000, 5, -4000) },
 		{ "Café", Vector3.new(-386, 74, -314) },
-	},
-	["Terceiro Mar"] = {
+	} },
+	{ "Terceiro Mar", {
 		{ "Egghead", Vector3.new(6000, 5, 6000) },
 		{ "Mansion", Vector3.new(6000, 5, -6000) },
 		{ "Hydra", Vector3.new(-8000, 5, 0) },
 		{ "Great Tree", Vector3.new(-1055, 328, -8916) },
-	},
-	["Admin / Dev"] = {
+	} },
+	{ "Admin / Dev", {
 		{ "Admin Island", Vector3.new(0, 5, -10000) },
 		{ "Admin Room", Vector3.new(0, 5, -12500) },
 		{ "Dev Room", Vector3.new(0, 1000, -15000) },
-		{ "Skybox / Vazio", Vector3.new(0, 3000, 0) },
-	},
+		{ "Vazio / Skybox", Vector3.new(0, 3000, 0) },
+	} },
 }
+
+local function CommF()
+	local remotes = RS:FindFirstChild("Remotes")
+	return remotes and remotes:FindFirstChild("CommF_")
+end
+local function invoke(...)
+	local c = CommF()
+	if not c then return false end
+	local ok, res = pcall(function() return c:InvokeServer(...) end)
+	return ok, res
+end
 
 local function TP(pos, label)
 	local r = root()
 	if not r then return Notify("Sem personagem", true) end
 	if (r.Position - pos).Magnitude > 3000 then
-		pcall(function()
-			RS.Remotes.CommF_:InvokeServer("requestEntrance", pos)
-		end)
+		invoke("requestEntrance", pos)
 		task.wait(0.5)
 	end
 	r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
@@ -480,46 +545,86 @@ local function TP(pos, label)
 end
 
 --==================== FRUTAS ==========================================
-local FRUITS = {
-	"Dragon", "Kitsune", "Magnet", "Yeti", "Control", "Gas", "Leopard", "Dough",
-	"T-Rex", "Spirit", "Mammoth", "Tiger", "Empyrean", "Fiend", "Werewolf",
-	"Venom", "Shadow", "Blizzard", "Gravity", "Pain", "Rumble", "Light", "Love",
-	"Portal", "Buddha", "Quake", "Magma", "Spider", "Sound", "Phoenix", "Falcon",
-	"Ice", "Sand", "Dark", "Diamond", "Rubber", "Barrier", "Flame", "Spring",
-	"Bomb", "Smoke", "Spike", "Chop", "Revive", "Blade", "Ghost", "Eagle",
-	"Rocket", "Spin", "Kilo",
+local FRUIT_GROUPS = {
+	{ "Comum / Baratas", {
+		"Rocket", "Kilo", "Spin", "Blade", "Chop", "Spring", "Bomb", "Spike",
+	} },
+	{ "Incomum / Rara", {
+		"Diamond", "Revive", "Rubber", "Ghost", "Barrier", "Creation", "Door", "Portal",
+		"Smoke", "Flame", "Ice", "Sand", "Dark", "Light", "Falcon", "Eagle",
+	} },
+	{ "Lendária", {
+		"Quake", "Love", "Spider", "String", "Sound", "Pain", "Paw", "Magma",
+		"Lightning", "Rumble", "Blizzard", "Buddha", "Phoenix",
+	} },
+	{ "Mítica", {
+		"Gravity", "Shadow", "Venom", "Spirit", "Soul", "Control", "Dough", "Gas",
+		"Hellfire (Gas)", "Mammoth", "T-Rex", "Leopard", "Tiger", "Yeti", "Kitsune",
+		"Dragon", "Dragon (Classic)", "Magnet", "Empyrean (Kitsune)", "Fiend (Yeti)",
+		"Werewolf (Tiger)", "Celestial", "Oni", "Meme",
+	} },
 }
 
-local fruitMode = "physical" -- physical | real
-local spawnedFruits = {}
+local ALIAS = {
+	Rocket = "Kilo", Kilo = "Rocket", Blade = "Chop", Chop = "Blade",
+	Portal = "Door", Door = "Portal", Lightning = "Rumble", Rumble = "Lightning",
+	Spirit = "Soul", Soul = "Spirit", Spider = "String", String = "Spider",
+	Tiger = "Leopard", Leopard = "Tiger", Creation = "Barrier", Barrier = "Creation",
+	Eagle = "Falcon", Falcon = "Eagle",
+}
+
+local fruitMode = "physical"
+local spawned = {}
+
+local function cleanName(name)
+	return (name:gsub("%s*%b()", ""))
+end
 
 local function findTemplate(name)
-	local keys = { name, name .. " Fruit", name .. "-" .. name, name .. "-" .. name .. " Fruit" }
-	local function match(o)
+	local base = cleanName(name)
+	local keys = { name, base, base .. " Fruit", base .. "-" .. base, base .. "-" .. base .. " Fruit" }
+	if ALIAS[base] then
+		local a = ALIAS[base]
+		table.insert(keys, a)
+		table.insert(keys, a .. " Fruit")
+		table.insert(keys, a .. "-" .. a)
+		table.insert(keys, a .. "-" .. a .. " Fruit")
+	end
+	for _, k in ipairs(keys) do k = k:lower() end
+	local function matches(o)
+		local n = o.Name:lower()
 		for _, k in ipairs(keys) do
-			if o.Name:lower() == k:lower() then return true end
+			if n == k then return true end
 		end
 		return false
 	end
-	local containers = { RS, workspace }
-	for _, c in ipairs(containers) do
-		for _, d in ipairs(c:GetDescendants()) do
-			if (d:IsA("Tool") or d:IsA("Model")) and match(d) then return d end
+	local scanned = 0
+	for _, container in ipairs({ RS, workspace }) do
+		for _, d in ipairs(container:GetDescendants()) do
+			scanned += 1
+			if scanned > 60000 then break end
+			if (d:IsA("Tool") or d:IsA("Model")) and matches(d) then return d end
 		end
 	end
+	return nil
 end
 
-local function spawnPhysical(name)
+local function spawnAt(name, angle, radius)
 	local tmpl = findTemplate(name)
 	if not tmpl then return false end
-	local clone = tmpl:Clone()
-	clone.Name = name .. " Fruit"
-	if #spawnedFruits > 30 then
-		local oldF = table.remove(spawnedFruits, 1)
+	if #spawned > 130 then
+		local oldF = table.remove(spawned, 1)
 		if oldF and oldF.Parent then oldF:Destroy() end
 	end
 	local r = root()
-	local origin = r and (r.CFrame * CFrame.new(0, 3, -6)).Position or Vector3.new(0, 60, 0)
+	local baseCF
+	if r then
+		baseCF = r.CFrame * CFrame.new(math.cos(angle) * radius, 4, math.sin(angle) * radius)
+	else
+		baseCF = CFrame.new(0, 80, 0)
+	end
+	local clone = tmpl:Clone()
+	clone.Name = cleanName(name) .. " Fruit"
 	if clone:IsA("Model") then
 		for _, p in ipairs(clone:GetDescendants()) do
 			if p:IsA("BasePart") then
@@ -528,9 +633,11 @@ local function spawnPhysical(name)
 			end
 		end
 		clone.Parent = workspace
-		if clone.PrimaryPart then clone:PivotTo(CFrame.new(origin)) else
+		if clone.PrimaryPart then
+			clone:PivotTo(baseCF)
+		else
 			local first = clone:FindFirstChildWhichIsA("BasePart")
-			if first then first.Position = origin end
+			if first then first.CFrame = baseCF end
 		end
 	else
 		local handle = clone:FindFirstChild("Handle") or clone:FindFirstChildWhichIsA("BasePart")
@@ -538,55 +645,30 @@ local function spawnPhysical(name)
 		if handle then
 			handle.Anchored = false
 			handle.CanCollide = true
-			handle.Position = origin
+			handle.CFrame = baseCF
 		end
 	end
-	local hi = new("Highlight", { FillTransparency = 0.7, OutlineTransparency = 0.1, FillColor3 = C.accent, OutlineColor3 = C.accent }, clone)
-	table.insert(spawnedFruits, clone)
-	task.delay(60, function() if hi then hi:Destroy() end end)
+	new("Highlight", {
+		FillTransparency = 0.72, OutlineTransparency = 0.1,
+		FillColor3 = C.accent, OutlineColor3 = C.accent, Parent = clone,
+	})
+	table.insert(spawned, clone)
 	return true
 end
 
 local function fruitAction(name)
 	if fruitMode == "real" then
-		local ok = pcall(function()
-			RS.Remotes.CommF_:InvokeServer("BuyFruit", name .. "-" .. name)
-		end)
-		pcall(function() RS.Remotes.CommF_:InvokeServer("LoadFruit", name) end)
+		local ok = invoke("BuyFruit", cleanName(name) .. "-" .. cleanName(name))
+		invoke("LoadFruit", cleanName(name))
 		Notify(ok and ("Servidor: " .. name) or ("Falha: " .. name), not ok)
+		return
+	end
+	if spawnAt(name, math.random() * math.pi * 2, 9) then
+		Notify("Spawn: " .. name)
 	else
-		if spawnPhysical(name) then
-			Notify(name .. " gerada (física)")
-		else
-			pcall(function() RS.Remotes.CommF_:InvokeServer("LoadFruit", name) end)
-			Notify(name .. " enviada ao inventário")
-		end
+		invoke("LoadFruit", cleanName(name))
+		Notify("Sem modelo, enviado ao inventário: " .. name, true)
 	end
-end
-
---==================== ITEMS (ADMIN) ===================================
-local ITEMS = {
-	"Dark Blade", "Cursed Dual Katana", "Saber", "Bisento", "Dragon Trident",
-	"Hallow Scythe", "Saddi", "Kabucha", "Serpent Bow", "Bazooka", "Cannon",
-	"Flintlock", "Musket", "Slingshot", "Acidum Rifle", "Bizarre Rifle",
-	"Katana", "Cutlass", "Trident", "Pole (2nd Form)", "Superhuman", "Godhuman",
-	"Sanguine Art", "Electric Claw", "Dragon Talon", "Sharkman Karate",
-	"Death Step", "Mink", "Rokushiki",
-}
-
-local function giveTool(name)
-	local tmpl = findTemplate(name)
-	if tmpl and tmpl:IsA("Tool") then
-		local bp = Player:FindFirstChild("Backpack")
-		if not bp then return Notify("Sem backpack", true) end
-		local clone = tmpl:Clone()
-		clone.Parent = bp
-		return Notify("Item: " .. name)
-	end
-	local ok = pcall(function()
-		RS.Remotes.CommF_:InvokeServer("BuyItem", name)
-	end)
-	Notify(ok and ("Servidor: " .. name) or ("Não encontrado: " .. name), not ok)
 end
 
 --==================== ESP =============================================
@@ -604,23 +686,27 @@ local BONES = {
 }
 
 local function clearEsp()
-	for char in pairs(espCache) do
-		local d = espCache[char]
+	for c, d in pairs(espCache) do
 		if d.box then d.box:Destroy() end
 		if d.bill then d.bill:Destroy() end
-		if d.lines then for _, l in ipairs(d.lines) do l:Destroy() end end
 		if d.tracer then d.tracer:Destroy() end
+		if d.lines then
+			for _, l in ipairs(d.lines) do l:Destroy() end
+		end
+		espCache[c] = nil
 	end
 	espCache = {}
 end
 
-local function buildEsp(char, isPlayer, plr)
-	if espCache[char] then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-	local h = char:FindFirstChildOfClass("Humanoid")
-	local head = char:FindFirstChild("Head") or hrp
-	if not hrp or not h then return end
-	local col = (isPlayer and plr and plr.Team and plr.Team.TeamColor.Color) or Color3.fromRGB(255, 90, 90)
+local function buildEsp(target, plr)
+	if espCache[target] then return end
+	local hrp = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Torso")
+		or target:FindFirstChild("UpperTorso") or target:FindFirstChildWhichIsA("BasePart")
+	local h = target:FindFirstChildOfClass("Humanoid")
+	local head = target:FindFirstChild("Head") or hrp
+	if not hrp then return end
+	local col = Color3.fromRGB(255, 90, 90)
+	if plr and plr.Team then col = plr.Team.TeamColor.Color end
 	local d = { lines = {} }
 
 	if esp.box then
@@ -629,15 +715,16 @@ local function buildEsp(char, isPlayer, plr)
 			Transparency = 0.4, Color3 = col, Adornee = hrp, Parent = hrp,
 		})
 	end
-	if esp.name or esp.hp then
+	if (esp.name or esp.hp) and head then
 		d.bill = new("BillboardGui", {
 			Size = UDim2.new(0, 130, 0, 40), StudsOffset = Vector3.new(0, 2.6, 0),
 			AlwaysOnTop = true, Adornee = head, Parent = head,
 		})
 		if esp.name then
 			d.label = new("TextLabel", {
-				Text = char.Name, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = Color3.new(1, 1, 1),
-				TextStrokeTransparency = 0.4, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 15), Parent = d.bill,
+				Text = target.Name, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = Color3.new(1, 1, 1),
+				TextStrokeTransparency = 0.4, BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 15), Parent = d.bill,
 			})
 		end
 		if esp.hp then
@@ -647,13 +734,13 @@ local function buildEsp(char, isPlayer, plr)
 			})
 			corner(bg, 2)
 			d.fill = new("Frame", {
-				Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.good, BorderSizePixel = 0, Parent = bg,
+				Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.good,
+				BorderSizePixel = 0, Parent = bg,
 			})
 			corner(d.fill, 2)
-			d.hpbg = bg
 		end
 	end
-	if esp.skel then
+	if esp.skel and h then
 		for i = 1, #BONES do
 			d.lines[i] = new("LineHandleAdornment", {
 				Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 6,
@@ -661,42 +748,42 @@ local function buildEsp(char, isPlayer, plr)
 			})
 		end
 	end
-	if esp.tracer then
+	if esp.tracer and head then
 		d.tracer = new("LineHandleAdornment", {
 			Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 4, Parent = Cam, Length = 0,
 		})
 	end
-	espCache[char] = d
+	espCache[target] = d
 end
 
 local function updateEsp()
-	for char, d in pairs(espCache) do
-		if not char.Parent then
-			clearEsp() -- recria tudo no próximo ciclo
+	for target, d in pairs(espCache) do
+		if not target.Parent then
+			clearEsp()
 			break
 		end
-		local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
-		local head = char:FindFirstChild("Head")
-		local h = char:FindFirstChildOfClass("Humanoid")
+		local hrp = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Torso")
+		local head = target:FindFirstChild("Head")
+		local h = target:FindFirstChildOfClass("Humanoid")
 		if d.box and hrp then d.box.Adornee = hrp end
 		if d.bill and head then d.bill.Adornee = head end
 		if d.fill and h then
-			d.fill.Size = UDim2.new(math.clamp(h.Health / math.max(h.MaxHealth, 1), 0, 1), 0, 1, 0)
-			d.fill.BackgroundColor3 = C.good:Lerp(C.bad, 1 - math.clamp(h.Health / math.max(h.MaxHealth, 1), 0, 1))
+			local ratio = math.clamp(h.Health / math.max(h.MaxHealth, 1), 0, 1)
+			d.fill.Size = UDim2.new(ratio, 0, 1, 0)
+			d.fill.BackgroundColor3 = C.bad:Lerp(C.good, ratio)
 		end
-		if d.label then
-			local dist = head and (Cam.CFrame.Position - head.Position).Magnitude or 0
-			d.label.Text = char.Name .. "  [" .. math.floor(dist) .. "]"
+		if d.label and head then
+			d.label.Text = target.Name .. "  [" .. math.floor((Cam.CFrame.Position - head.Position).Magnitude) .. "]"
 		end
 		if hrp then
-			for i, pair in ipairs(BONES) do
+			for i, pairNames in ipairs(BONES) do
 				local line = d.lines[i]
 				if line then
-					local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
+					local a = target:FindFirstChild(pairNames[1])
+					local b = target:FindFirstChild(pairNames[2])
 					if a and b then
-						local pa, pb = a.Position, b.Position
-						line.Length = (pa - pb).Magnitude
-						line.CFrame = CFrame.new((pa + pb) / 2, pb)
+						line.Length = (a.Position - b.Position).Magnitude
+						line.CFrame = CFrame.new((a.Position + b.Position) / 2, b.Position)
 					else
 						line.Length = 0
 					end
@@ -715,18 +802,17 @@ Run.RenderStepped:Connect(function()
 	if not esp.on then return end
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= Player and plr.Character then
-			if esp.team and plr.Team == Player.Team then
-				-- pula aliado
-			else
+			local isTeam = esp.team and plr.Team == Player.Team
+			if not isTeam then
 				local h = plr.Character:FindFirstChildOfClass("Humanoid")
-				if h and h.Health > 0 then buildEsp(plr.Character, true, plr) end
+				if h and h.Health > 0 then buildEsp(plr.Character, plr) end
 			end
 		end
 	end
 	if esp.fruit then
 		for _, obj in ipairs(workspace:GetChildren()) do
-			if obj.Name:find("Fruit") and not obj:FindFirstChildOfClass("Humanoid") and not espCache[obj] then
-				buildEsp(obj, false)
+			if obj.Name:find("Fruit") and not obj:FindFirstChildOfClass("Humanoid") then
+				buildEsp(obj, nil)
 			end
 		end
 	end
@@ -768,45 +854,61 @@ Run.RenderStepped:Connect(function()
 	end
 	if best then
 		local target = best.Position
-		if aim.predict then
-			target += best.AssemblyLinearVelocity * 0.14
-		end
+		if aim.predict then target = target + best.AssemblyLinearVelocity * 0.14 end
 		Cam.CFrame = Cam.CFrame:Lerp(CFrame.new(Cam.CFrame.Position, target), aim.smooth)
 	end
 end)
 
---==================== FLY / NOCLIP ====================================
-local flyBV, flyConn, noclipConn
+--==================== VOO =============================================
+local flyBV, flyConn
+local flyUp, flyDown = false, false
+local lockY
 
 local function setFly(on)
 	state.fly = on
-	local c, r, h = char(), root(), hum()
+	local r, h = root(), hum()
 	if flyConn then flyConn:Disconnect(); flyConn = nil end
 	if flyBV then flyBV:Destroy(); flyBV = nil end
-	if not on then
+	if on then
+		if not r then
+			state.fly = false
+			return Notify("Sem personagem", true)
+		end
+		if h then h.PlatformStand = true end
+		lockY = state.flyLock and r.Position.Y or nil
+		flyBV = new("BodyVelocity", {
+			MaxForce = Vector3.new(1e5, 1e5, 1e5), P = 8000, Velocity = Vector3.zero, Parent = r,
+		})
+		flyConn = Run.RenderStepped:Connect(function()
+			local c = char()
+			local rr = c and c:FindFirstChild("HumanoidRootPart")
+			if not rr or not flyBV or not flyBV.Parent then return end
+			local dir = Vector3.zero
+			if UIS:IsKeyDown(Enum.KeyCode.W) then dir += Cam.CFrame.LookVector end
+			if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= Cam.CFrame.LookVector end
+			if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= Cam.CFrame.RightVector end
+			if UIS:IsKeyDown(Enum.KeyCode.D) then dir += Cam.CFrame.RightVector end
+			local vertical = 0
+			if UIS:IsKeyDown(Enum.KeyCode.Space) or flyUp then vertical += 1 end
+			if UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.C) or flyDown then vertical -= 1 end
+			local speed = state.flySpeed
+			if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then speed *= 2 end
+			local target = Vector3.new(dir.X, 0, dir.Z)
+			if target.Magnitude > 0 then target = target.Unit * speed end
+			target = Vector3.new(target.X, vertical * state.flyVert, target.Z)
+			if state.flyLock and lockY then
+				target = Vector3.new(target.X, (lockY - rr.Position.Y) * 6, target.Z)
+			end
+			flyBV.Velocity = flyBV.Velocity:Lerp(target, math.clamp(state.flyAccel, 0.05, 1))
+		end)
+	else
 		if h then h.PlatformStand = false end
-		return
+		lockY = nil
 	end
-	if not r then return Notify("Sem personagem", true) end
-	if h then h.PlatformStand = true end
-	flyBV = new("BodyVelocity", {
-		MaxForce = Vector3.new(1e5, 1e5, 1e5), P = 4000, Velocity = Vector3.zero, Parent = r,
-	})
-	flyConn = Run.RenderStepped:Connect(function()
-		local cc = char()
-		local rr = cc and cc:FindFirstChild("HumanoidRootPart")
-		if not rr or not flyBV.Parent then return end
-		local dir = Vector3.zero
-		if UIS:IsKeyDown(Enum.KeyCode.W) then dir += Cam.CFrame.LookVector end
-		if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= Cam.CFrame.LookVector end
-		if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= Cam.CFrame.RightVector end
-		if UIS:IsKeyDown(Enum.KeyCode.D) then dir += Cam.CFrame.RightVector end
-		if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.yAxis end
-		if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.yAxis end
-		flyBV.Velocity = dir.Magnitude > 0 and dir.Unit * state.flySpeed or Vector3.zero
-	end)
 end
 
+--==================== NOCLIP ==========================================
+local noclipConn
 local function setNoclip(on)
 	state.noclip = on
 	if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
@@ -820,26 +922,44 @@ local function setNoclip(on)
 	end)
 end
 
-UIS.JumpRequest:Connect(function()
-	if not state.infJump then return end
-	local h = hum()
-	if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
-end)
+--==================== BOTÕES MÓVEIS DE VOO ============================
+local flyPad = new("Frame", {
+	Size = UDim2.new(0, 46, 0, 104), Position = UDim2.new(1, -62, 0.5, 40),
+	BackgroundTransparency = 1, Visible = false, Parent = Gui,
+})
+new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, flyPad)
+local function padBtn(txt, order, setter)
+	local b = new("TextButton", {
+		Text = txt, Font = Enum.Font.GothamBlack, TextSize = 16, TextColor3 = C.accent,
+		BackgroundColor3 = C.card, BackgroundTransparency = 0.15, Size = UDim2.new(1, 0, 0, 46),
+		LayoutOrder = order, AutoButtonColor = false, Parent = flyPad,
+	})
+	corner(b, 10)
+	stroke(b, C.accent, 1, 0.5)
+	b.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			setter(true)
+			b.BackgroundColor3 = C.hover
+		end
+	end)
+	b.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+			setter(false)
+			b.BackgroundColor3 = C.card
+		end
+	end)
+	return b
+end
+padBtn("+", 1, function(v) flyUp = v end)
+padBtn("−", 2, function(v) flyDown = v end)
 
---==================== CONTEÚDO: TELEPORT ==============================
+--==================== ABA TELEPORT ====================================
 local tpPage = newPage("Teleport")
-for group, list in pairs(PLACES) do
-	Section(tpPage, group)
+for _, group in ipairs(PLACES) do
+	Section(tpPage, group[1])
 	local g = Grid(tpPage, 2)
-	for _, entry in ipairs(list) do
-		local b = new("TextButton", {
-			Text = entry[1], Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = C.text,
-			BackgroundColor3 = C.card, AutoButtonColor = false, TextTruncate = Enum.TextTruncate.AtEnd, Parent = g,
-		})
-		corner(b, 6)
-		b.MouseEnter:Connect(function() Tween:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = C.hover }):Play() end)
-		b.MouseLeave:Connect(function() Tween:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = C.card }):Play() end)
-		b.MouseButton1Click:Connect(function() TP(entry[2], entry[1]) end)
+	for _, entry in ipairs(group[2]) do
+		GridButton(g, entry[1], nil, function() TP(entry[2], entry[1]) end)
 	end
 end
 Section(tpPage, "Jogadores")
@@ -850,30 +970,26 @@ local function refreshPlayers()
 	end
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= Player then
-			local b = new("TextButton", {
-				Text = plr.Name, Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = C.text,
-				BackgroundColor3 = C.card, AutoButtonColor = false, TextTruncate = Enum.TextTruncate.AtEnd, Parent = playerGrid,
-			})
-			corner(b, 6)
-			b.MouseButton1Click:Connect(function()
-				if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-					TP(plr.Character.HumanoidRootPart.Position, plr.Name)
-				end
+			GridButton(playerGrid, plr.Name, nil, function()
+				local c = plr.Character
+				local r = c and c:FindFirstChild("HumanoidRootPart")
+				if r then TP(r.Position, plr.Name) end
 			end)
 		end
 	end
 end
 refreshPlayers()
-Players.PlayerAdded:Connect(refreshPlayers)
-Players.PlayerRemoving:Connect(refreshPlayers)
+Players.PlayerAdded:Connect(function() task.wait(0.5); refreshPlayers() end)
+Players.PlayerRemoving:Connect(function() task.wait(0.5); refreshPlayers() end)
 
---==================== CONTEÚDO: FRUTAS ================================
-local frPage = newPage("Frutas")
-Section(frPage, "Modo")
-local modeRow = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Parent = frPage })
+--==================== ABA SPAWN =======================================
+local spPage = newPage("Spawn")
+
+Section(spPage, "Modo")
+local modeRow = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Parent = spPage })
 new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }, modeRow)
 local modeBtns = {}
-for _, m in ipairs({ { "physical", "Física" }, { "real", "Servidor" } }) do
+for _, m in ipairs({ { "physical", "Físico" }, { "real", "Servidor" } }) do
 	local b = new("TextButton", {
 		Text = m[2], Font = Enum.Font.GothamSemibold, TextSize = 11, TextColor3 = C.dim,
 		BackgroundColor3 = C.card, Size = UDim2.new(0.5, -3, 1, 0), AutoButtonColor = false, Parent = modeRow,
@@ -891,58 +1007,135 @@ end
 modeBtns.physical.TextColor3 = C.accent
 modeBtns.physical.BackgroundColor3 = C.hover
 
-Section(frPage, "Buscar")
-local fruitSearch = Input(frPage, "nome da fruta", function() end)
-Section(frPage, "Todas as frutas")
-local fruitGrid = Grid(frPage, 2)
-local function fillFruits(filter)
-	for _, c in ipairs(fruitGrid:GetChildren()) do
-		if c:IsA("TextButton") then c:Destroy() end
+Section(spPage, "Mapa de spawn")
+local searchBox = Input(spPage, "filtrar fruta", function() end)
+local allFruits = {}
+for _, g in ipairs(FRUIT_GROUPS) do
+	for _, n in ipairs(g[2]) do table.insert(allFruits, n) end
+end
+
+local function spawnCircle(list)
+	local r = root()
+	if not r then return Notify("Sem personagem", true) end
+	local ok = 0
+	for i, name in ipairs(list) do
+		local angle = (i / #list) * math.pi * 2
+		if spawnAt(name, angle, 16) then ok += 1 end
 	end
-	for _, name in ipairs(FRUITS) do
-		if filter == "" or name:lower():find(filter:lower(), 1, true) then
+	Notify("Spawn: " .. ok .. "/" .. #list .. " frutas")
+end
+
+local spawnGrids = {}
+local function rebuildSpawn(filter)
+	for _, g in ipairs(spawnGrids) do g:Destroy() end
+	spawnGrids = {}
+	for _, group in ipairs(FRUIT_GROUPS) do
+		local shown = {}
+		for _, name in ipairs(group[2]) do
+			if filter == "" or name:lower():find(filter:lower(), 1, true) then
+				table.insert(shown, name)
+			end
+		end
+		if #shown > 0 then
+			Section(spPage, group[1])
+			local head = new("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, Parent = spPage })
+			table.insert(spawnGrids, head)
 			local b = new("TextButton", {
-				Text = name, Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = C.text,
-				BackgroundColor3 = C.card, AutoButtonColor = false, Parent = fruitGrid,
+				Text = "spawnar grupo (" .. #shown .. ")", Font = Enum.Font.GothamSemibold,
+				TextSize = 11, TextColor3 = C.accent, BackgroundColor3 = C.card,
+				Size = UDim2.new(1, 0, 1, 0), AutoButtonColor = false, Parent = head,
 			})
 			corner(b, 6)
-			b.MouseEnter:Connect(function() Tween:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = C.hover }):Play() end)
-			b.MouseLeave:Connect(function() Tween:Create(b, TweenInfo.new(0.1), { BackgroundColor3 = C.card }):Play() end)
-			b.MouseButton1Click:Connect(function() fruitAction(name) end)
+			b.MouseButton1Click:Connect(function() spawnCircle(shown) end)
+
+			local g = Grid(spPage, 3, 26)
+			table.insert(spawnGrids, g)
+			for _, name in ipairs(shown) do
+				GridButton(g, name, nil, function() fruitAction(name) end)
+			end
 		end
 	end
 end
-fillFruits("")
-fruitSearch:GetPropertyChangedSignal("Text"):Connect(function() fillFruits(fruitSearch.Text) end)
+rebuildSpawn("")
+searchBox:GetPropertyChangedSignal("Text"):Connect(function() rebuildSpawn(searchBox.Text) end)
 
-Section(frPage, "Nova fruta / extra")
-Input(frPage, "qualquer fruta do jogo", function(txt) fruitAction(txt) end)
-Button(frPage, "Fruta aleatória", function() fruitAction(FRUITS[math.random(1, #FRUITS)]) end)
-Button(frPage, "Limpar frutas geradas", function()
-	for _, f in ipairs(spawnedFruits) do if f.Parent then f:Destroy() end end
-	spawnedFruits = {}
+Section(spPage, "Ações")
+Button(spPage, "Spawnar TODAS em círculo", function() spawnCircle(allFruits) end)
+Button(spPage, "Spawnar 10 aleatórias", function()
+	local pick = {}
+	for _ = 1, 10 do table.insert(pick, allFruits[math.random(1, #allFruits)]) end
+	spawnCircle(pick)
+end)
+Button(spPage, "Fruta aleatória única", function() fruitAction(allFruits[math.random(1, #allFruits)]) end)
+Button(spPage, "Limpar frutas geradas", function()
+	for _, f in ipairs(spawned) do if f.Parent then f:Destroy() end end
+	spawned = {}
 	Notify("Cena limpa")
 end)
+Input(spPage, "fruta personalizada / nova", function(txt) fruitAction(txt) end)
 
---==================== CONTEÚDO: PLAYER ================================
+--==================== ABA PLAYER ======================================
 local plPage = newPage("Player")
 Section(plPage, "Velocidade")
-Slider(plPage, "WalkSpeed", 16, 300, 40, function(v) state.speed = v end)
+Slider(plPage, "WalkSpeed", 16, 400, 40, function(v) state.speed = v end)
 Section(plPage, "Pulo")
-Slider(plPage, "JumpPower", 50, 500, 50, function(v) state.jump = v end)
-Button(plPage, "Pulo alto rápido (250)", function()
-	state.jump = 250
-	Notify("Pulo alto ativo")
+local jumpToggle
+jumpToggle = Toggle(plPage, "Aplicar altura de pulo", false, function(v)
+	state.jumpOn = v
+	if not v then
+		local h = hum()
+		if h then
+			if h.UseJumpPower then h.JumpPower = 50 else h.JumpHeight = 15 end
+		end
+	end
+end)
+Slider(plPage, "Altura do pulo (studs)", 5, 400, 50, function(v) state.jumpHeight = v end)
+Slider(plPage, "Pulos por salto", 1, 10, 1, function(v)
+	state.multiJump = v
+	jumpCount = v - 1
+end)
+Button(plPage, "Ativar pulo agora", function()
+	state.jumpOn = true
+	jumpToggle.set(true)
+	applyStats()
+	Notify("Altura " .. state.jumpHeight .. " studs")
+end)
+Button(plPage, "Restaurar pulo padrão", function()
+	state.jumpOn = false
+	state.jumpHeight = 50
+	jumpToggle.set(false)
+	local h = hum()
+	if h then
+		if h.UseJumpPower then h.JumpPower = 50 else h.JumpHeight = 15 end
+	end
+	Notify("Pulo padrão")
+end)
+Section(plPage, "Voo")
+local flyToggle
+flyToggle = Toggle(plPage, "Voo", false, function(v)
+	setFly(v)
+	flyPad.Visible = v
+	Notify(v and "Voo on" or "Voo off")
+end)
+Slider(plPage, "Velocidade horizontal", 10, 400, 70, function(v) state.flySpeed = v end)
+Slider(plPage, "Velocidade vertical", 10, 400, 60, function(v) state.flyVert = v end)
+Slider(plPage, "Suavidade do voo", 5, 100, 35, function(v) state.flyAccel = v / 100 end)
+Toggle(plPage, "Travar altitude", false, function(v) state.flyLock = v end)
+Button(plPage, "Subir 100 studs", function()
+	local r = root()
+	if r then r.CFrame = r.CFrame + Vector3.new(0, 100, 0) end
+end)
+Button(plPage, "Descer 100 studs", function()
+	local r = root()
+	if r then r.CFrame = r.CFrame - Vector3.new(0, 100, 0) end
 end)
 Section(plPage, "Movimento")
-Toggle(plPage, "Voo", false, function(v) setFly(v) end)
-Slider(plPage, "Velocidade do voo", 20, 250, 60, function(v) state.flySpeed = v end)
 Toggle(plPage, "Noclip", false, function(v) setNoclip(v) end)
 Toggle(plPage, "Pulo infinito", false, function(v) state.infJump = v end)
-Toggle(plPage, "God Mode (local)", false, function(v)
+Toggle(plPage, "God Mode", false, function(v)
 	state.god = v
 	applyStats()
-	Notify(v and "God Mode on" or "God Mode off")
+	Notify(v and "God on" or "God off")
 end)
 Section(plPage, "Personagem")
 Button(plPage, "Curar", function()
@@ -954,26 +1147,29 @@ Button(plPage, "Resetar personagem", function()
 	local h = hum()
 	if h then h.Health = 0 end
 end)
-Button(plPage, "Resetar velocidade/pulo", function()
-	state.speed, state.jump = 16, 50
+Button(plPage, "Restaurar tudo", function()
+	state.speed, state.jumpHeight, state.multiJump = 16, 50, 1
+	state.god, state.infJump, state.noclip = false, false, false
+	if state.fly then setFly(false) end
+	setNoclip(false)
 	applyStats()
-	Notify("Padrão restaurado")
+	Notify("Tudo restaurado")
 end)
 
---==================== CONTEÚDO: COMBATE ===============================
+--==================== ABA COMBATE =====================================
 local cbPage = newPage("Combate")
 Section(cbPage, "Aimbot")
 Toggle(cbPage, "Aimbot", false, function(v)
 	aim.on = v
 	fovCircle.Visible = v
-	Notify(v and "Aimbot ligado" or "Aimbot desligado")
+	Notify(v and "Aimbot on" or "Aimbot off")
 end)
-Slider(cbPage, "FOV", 40, 500, 150, function(v)
+Slider(cbPage, "FOV", 40, 600, 150, function(v)
 	aim.fov = v
 	fovCircle.Size = UDim2.new(0, v * 2, 0, v * 2)
 end)
 Slider(cbPage, "Suavidade", 5, 100, 22, function(v) aim.smooth = v / 100 end)
-Toggle(cbPage, "Predição de movimento", false, function(v) aim.predict = v end)
+Toggle(cbPage, "Predição", false, function(v) aim.predict = v end)
 Toggle(cbPage, "Ignorar time", true, function(v) aim.team = v end)
 Section(cbPage, "Mira")
 Button(cbPage, "Centralizar mira", function()
@@ -981,13 +1177,13 @@ Button(cbPage, "Centralizar mira", function()
 	if r then Cam.CFrame = CFrame.new(Cam.CFrame.Position, r.Position + Cam.CFrame.LookVector * 10) end
 end)
 
---==================== CONTEÚDO: VISUAL ================================
+--==================== ABA VISUAL ======================================
 local vsPage = newPage("Visual")
 Section(vsPage, "ESP")
 Toggle(vsPage, "ESP ativo", false, function(v)
 	esp.on = v
 	if not v then clearEsp() end
-	Notify(v and "ESP ligado" or "ESP desligado")
+	Notify(v and "ESP on" or "ESP off")
 end)
 Toggle(vsPage, "Caixa", true, function(v) esp.box = v; clearEsp() end)
 Toggle(vsPage, "Nome + distância", true, function(v) esp.name = v; clearEsp() end)
@@ -999,33 +1195,42 @@ Section(vsPage, "Objetos")
 Toggle(vsPage, "ESP de frutas", false, function(v) esp.fruit = v; clearEsp() end)
 Button(vsPage, "Reiniciar ESP", function() clearEsp(); Notify("ESP reiniciado") end)
 
---==================== CONTEÚDO: ADMIN =================================
+--==================== ABA ADMIN =======================================
 local adPage = newPage("Admin")
 Section(adPage, "Ilhas de admin")
 local adminGrid = Grid(adPage, 2)
-for _, entry in ipairs(PLACES["Admin / Dev"]) do
-	local b = new("TextButton", {
-		Text = entry[1], Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = C.accent,
-		BackgroundColor3 = C.card, AutoButtonColor = false, Parent = adminGrid,
-	})
-	corner(b, 6)
-	b.MouseButton1Click:Connect(function() TP(entry[2], entry[1]) end)
+for _, entry in ipairs(PLACES[4][2]) do
+	GridButton(adminGrid, entry[1], C.accent, function() TP(entry[2], entry[1]) end)
 end
 
-Section(adPage, "Haki / estilos (servidor)")
-local function invoke(...)
-	local ok, res = pcall(function() return RS.Remotes.CommF_:InvokeServer(...) end)
-	return ok, res
-end
+Section(adPage, "Haki / time (servidor)")
 Button(adPage, "Comprar Buso Haki", function() invoke("BuyHaki", "Buso"); Notify("Buso") end)
 Button(adPage, "Comprar Kenbunshoku", function() invoke("BuyHaki", "Ken"); Notify("Ken") end)
 Button(adPage, "Comprar Geppo", function() invoke("BuyHaki", "Geppo"); Notify("Geppo") end)
 Button(adPage, "Comprar Soru", function() invoke("BuyHaki", "Soru"); Notify("Soru") end)
-Button(adPage, "Entrar em time Pirata", function() invoke("SetTeam", "Pirates"); Notify("Time: Pirates") end)
-Button(adPage, "Entrar em time Marinha", function() invoke("SetTeam", "Marines"); Notify("Time: Marines") end)
+Button(adPage, "Time Pirata", function() invoke("SetTeam", "Pirates"); Notify("Pirates") end)
+Button(adPage, "Time Marinha", function() invoke("SetTeam", "Marines"); Notify("Marines") end)
 
-Section(adPage, "Items (qualquer item)")
-local itemSearch = Input(adPage, "buscar item", function() end)
+Section(adPage, "Items")
+local ITEMS = {
+	"Dark Blade", "Cursed Dual Katana", "Saber", "Bisento", "Dragon Trident",
+	"Hallow Scythe", "Saddi", "Kabucha", "Serpent Bow", "Bazooka", "Cannon",
+	"Flintlock", "Musket", "Slingshot", "Acidum Rifle", "Bizarre Rifle",
+	"Katana", "Cutlass", "Trident", "Superhuman", "Godhuman", "Sanguine Art",
+	"Electric Claw", "Dragon Talon", "Sharkman Karate", "Death Step", "Mink",
+}
+local function giveTool(name)
+	local tmpl = findTemplate(name)
+	if tmpl and tmpl:IsA("Tool") then
+		local bp = Player:FindFirstChild("Backpack")
+		if not bp then return Notify("Sem backpack", true) end
+		tmpl:Clone().Parent = bp
+		return Notify("Item: " .. name)
+	end
+	local ok = invoke("BuyItem", name)
+	Notify(ok and ("Servidor: " .. name) or ("Não achado: " .. name), not ok)
+end
+local itemSearch = Input(adPage, "filtrar item", function() end)
 local itemGrid = Grid(adPage, 2)
 local function fillItems(filter)
 	for _, c in ipairs(itemGrid:GetChildren()) do
@@ -1033,28 +1238,16 @@ local function fillItems(filter)
 	end
 	for _, name in ipairs(ITEMS) do
 		if filter == "" or name:lower():find(filter:lower(), 1, true) then
-			local b = new("TextButton", {
-				Text = name, Font = Enum.Font.GothamMedium, TextSize = 11, TextColor3 = C.text,
-				BackgroundColor3 = C.card, AutoButtonColor = false, TextTruncate = Enum.TextTruncate.AtEnd, Parent = itemGrid,
-			})
-			corner(b, 6)
-			b.MouseButton1Click:Connect(function() giveTool(name) end)
+			GridButton(itemGrid, name, nil, function() giveTool(name) end)
 		end
 	end
 end
 fillItems("")
 itemSearch:GetPropertyChangedSignal("Text"):Connect(function() fillItems(itemSearch.Text) end)
 Input(adPage, "item personalizado", function(txt) giveTool(txt) end)
-Button(adPage, "Escanear items reais do jogo", function()
-	local found = 0
-	for _, d in ipairs(RS:GetDescendants()) do
-		if d:IsA("Tool") then found += 1 end
-	end
-	Notify("Tools no jogo: " .. found)
-end)
 
 Section(adPage, "Extras")
-Button(adPage, "Copiar posição atual", function()
+Button(adPage, "Copiar posição", function()
 	local r = root()
 	if not r then return end
 	local p = r.Position
@@ -1071,25 +1264,24 @@ local function setOpen(open)
 		Win.Size = UDim2.new(0, W, 0, H * 0.85)
 		Tween:Create(Win, TweenInfo.new(0.22, Enum.EasingStyle.Quint), { Size = UDim2.new(0, W, 0, H) }):Play()
 		Tween:Create(Orb, TweenInfo.new(0.18), { BackgroundColor3 = C.accent }):Play()
-		Tween:Create(Orb.TextLabel, TweenInfo.new(0.18), { TextColor3 = C.bg }):Play()
+		Tween:Create(OrbLbl, TweenInfo.new(0.18), { TextColor3 = C.bg }):Play()
 	else
 		Tween:Create(Win, TweenInfo.new(0.18, Enum.EasingStyle.Quint), { Size = UDim2.new(0, W, 0, 0) }):Play()
-		task.delay(0.18, function() if not (Win.Visible and Win.AbsoluteSize.Y > 40) then Win.Visible = false end end)
-		Tween:Create(Orb, TweenInfo.new(0.18), { BackgroundColor3 = C.panel }):Play()
-		Tween:Create(Orb.TextLabel, TweenInfo.new(0.18), { TextColor3 = C.accent }):Play()
+		Tween:Create(Orb, TweenInfo.new(0.18), { BackgroundColor3 = C.card }):Play()
+		Tween:Create(OrbLbl, TweenInfo.new(0.18), { TextColor3 = C.accent }):Play()
+		task.delay(0.19, function()
+			if Win.Size.Y.Offset < 40 then Win.Visible = false end
+		end)
 	end
 end
 
-Orb.MouseButton1Click:Connect(function()
-	setOpen(not Win.Visible)
-end)
+Orb.MouseButton1Click:Connect(function() setOpen(not Win.Visible) end)
 
 UIS.InputBegan:Connect(function(i, gp)
 	if gp then return end
-	if i.KeyCode == Enum.KeyCode.RightShift then
-		setOpen(not Win.Visible)
-	end
+	if i.KeyCode == Enum.KeyCode.RightShift then setOpen(not Win.Visible) end
 end)
 
 showTab("Teleport")
-Notify("JDEV carregado")
+task.wait(0.1)
+Notify("JDEV v2 pronto")
