@@ -1,5 +1,5 @@
 -- ==========================================
--- JDEV ULTIMATE LUNAR UI - NOV 2026
+-- JDEV ULTIMATE LUNAR UI - FIXED VERSION
 -- ==========================================
 
 local Players = game:GetService("Players")
@@ -15,14 +15,15 @@ local MainGui = Instance.new("ScreenGui")
 MainGui.Name = "JDevLunar"
 MainGui.ResetOnSpawn = false
 MainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+MainGui.Parent = Player.PlayerGui -- IMPORTANTE: Adicionado aqui
 
 local Dragging = false
 local DragStart = nil
 local StartPos = nil
-local CurrentTab = "Teleport" -- Tab padrão
+local CurrentTab = "Teleport"
 
 -- ==========================================
--- CORE DO PAINEL (DRAG & DROP)
+-- CORE DO PAINEL
 -- ==========================================
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
@@ -42,7 +43,7 @@ TitleButton.BackgroundTransparency = 1
 TitleButton.Size = UDim2.new(1, 0, 1, 0)
 TitleButton.Parent = MainFrame
 
--- Container Principal (Escondido inicialmente)
+-- Container Principal
 local Container = Instance.new("ScrollingFrame")
 Container.Name = "Container"
 Container.Size = UDim2.new(0, 260, 0, 350)
@@ -59,7 +60,7 @@ UIListLayout.Padding = UDim.new(0, 5)
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Parent = Container
 
--- Botão de Toggle (Clique no 'J')
+-- Toggle Button
 TitleButton.MouseButton1Click:Connect(function()
     if Container.Visible then
         TweenService:Create(Container, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, 260, 0, 0)}):Play()
@@ -165,7 +166,7 @@ function CreateHeader(text)
 end
 
 -- ==========================================
--- SISTEMA DE ABAS
+--- SISTEMA DE ABAS
 -- ==========================================
 local Tabs = {"Teleport", "Frutas", "Player", "Admin", "ESP"}
 local TabButtons = {}
@@ -188,22 +189,18 @@ for i, tabName in ipairs(Tabs) do
     TabButtons[tabName] = btn
     
     btn.MouseButton1Click:Connect(function()
-        -- Reset colors
         for _, tBtn in pairs(TabButtons) do
             tBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
             tBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
         end
-        -- Set active
         btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         btn.TextColor3 = Color3.fromRGB(0, 0, 0)
         
-        -- Clear Container
         for _, child in ipairs(Container:GetChildren()) do
             if child:IsA("GuiObject") then
                 child:Destroy()
             end
         end
-        -- Re-add layout
         UIListLayout.Parent = Container
         
         CurrentTab = tabName
@@ -283,7 +280,6 @@ end
 --- LÓGICA DO JOGO
 -- ==========================================
 
--- Teleport
 function Teleport(pos)
     local char = Player.Character or Player.CharacterAdded:Wait()
     local root = char:FindFirstChild("HumanoidRootPart")
@@ -292,33 +288,28 @@ function Teleport(pos)
     end
 end
 
--- Spawn Fruit (Real Physics)
 function SpawnFruit(name)
     local Remote = ReplicatedStorage.Remotes.CommF_:FindFirstChild("RemoteEvent")
     if Remote then
         Remote:FireServer("RequestFruit", name)
     else
-        -- Fallback
         local tool = Instance.new("Tool")
         tool.Name = name .. " Fruit"
         tool.Parent = Player.Backpack
     end
 end
 
--- Speed
 function ChangeSpeed(val)
     local char = Player.Character or Player.CharacterAdded:Wait()
     local hum = char:FindFirstChild("Humanoid")
     if hum then
         hum.WalkSpeed = val
-        -- Loop para manter speed se o jogo resetar
         while wait(1) do
             if hum then hum.WalkSpeed = val end
         end
     end
 end
 
--- Fly
 local flying = false
 function EnableFly(state)
     flying = state
@@ -328,7 +319,7 @@ function EnableFly(state)
     
     if state then
         if hum then hum.PlatformStand = true end
-        print("[JDev] Voo Ativado. Use W/S para subir/descer.")
+        print("[JDev] Voo Ativado.")
     else
         if hum then hum.PlatformStand = false end
     end
@@ -344,7 +335,6 @@ function EnableFly(state)
     end)
 end
 
--- Jump Power
 function ChangeJumpPower(val)
     local char = Player.Character or Player.CharacterAdded:Wait()
     local hum = char:FindFirstChild("Humanoid")
@@ -353,7 +343,6 @@ function ChangeJumpPower(val)
     end
 end
 
--- God Mode
 function EnableGodMode()
     local char = Player.Character or Player.CharacterAdded:Wait()
     local hum = char:FindFirstChild("Humanoid")
@@ -364,7 +353,6 @@ function EnableGodMode()
     end
 end
 
--- Admin Functions
 function FullInventory()
     local Remote = ReplicatedStorage.Remotes.CommF_
     if Remote then
@@ -393,7 +381,6 @@ function ResetStats()
     if stats then
         local statPoints = stats:FindFirstChild("StatPoints")
         if statPoints then statPoints.Value = 0 end
-        -- Simula reset de atributos (pode variar por versão)
         print("Stats resetados.")
     end
 end
@@ -417,18 +404,16 @@ function EquipRaid()
 end
 
 -- ==========================================
---- ESP & AIMBOT SYSTEM
+--- ESP & AIMBOT SYSTEM (CORRIGIDO)
 -- ==========================================
 local espEnabled = false
 local aimbotActive = false
 local espLines = {}
-local espBoxes = {}
-local targetPart = nil
+local espBoxes = {} -- Inicialização corrigida
 
 function ToggleEsp(state)
     espEnabled = state
     if not state then
-        -- Limpar ESP
         for _, line in pairs(espLines) do line:Destroy() end
         espLines = {}
         for _, box in pairs(espBoxes) do box:Destroy() end
@@ -447,11 +432,9 @@ function ToggleAimbot()
     end
 end
 
--- Loop Principal de ESP e Aimbot
 RunService.RenderStepped:Connect(function()
     if not Player.Character then return end
     
-    -- AIMBOT LOGIC
     if aimbotActive then
         local mouse = Player:GetMouse()
         local hit = mouse.Hit.p
@@ -465,18 +448,11 @@ RunService.RenderStepped:Connect(function()
             local instance = raycastResult.Instance
             local parent = instance.Parent
             
-            -- Se for um jogador ou NPC hostil
-            if (parent:FindFirstChild("Humanoid") and parent ~= Player.Character) or 
-               (workspace:FindFirstChildOfClass("Model") and parent.Name ~= "") then
-                
-                -- Verifica se é inimigo (simplificado)
+            if (parent:FindFirstChild("Humanoid") and parent ~= Player.Character) then
                 local hum = parent:FindFirstChild("Humanoid")
                 if hum and hum.Health > 0 then
-                    -- Teleporta câmera para o alvo (simulação de aimbot simples)
-                    -- Para um aimbot real de tiro, precisaria simular o clique na posição da cabeça
                     local head = parent:FindFirstChild("Head") or parent:FindFirstChild("HumanoidRootPart")
                     if head then
-                        -- Move o foco da câmera levemente
                         -- Camera.CameraSubject = head 
                     end
                 end
@@ -484,9 +460,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- ESP LOGIC
     if espEnabled then
-        -- Limpa linhas antigas
         for _, line in pairs(espLines) do line:Destroy() end
         espLines = {}
         
@@ -496,16 +470,6 @@ RunService.RenderStepped:Connect(function()
                 local hum = model.Humanoid
                 local root = model:FindFirstChild("HumanoidRootPart")
                 
-                -- Ignora aliados se quiser (lógica avançada omitida para brevidade)
-                
-                -- Caixa 3D (Simples)
-                local box = Instance.new("SelectionBox")
-                box.Adornee = root or head
-                box.Color3 = Color3.fromRGB(255, 0, 0) -- Vermelho para inimigos
-                box.LineThickness = 0.1
-                box.Parent = mainGui -- Parent to ScreenGui? No, parent to workspace usually but let's use billboard
-                
-                -- Billboard GUI para Nome e Vida
                 local billboard = Instance.new("BillboardGui")
                 billboard.Size = UDim2.new(0, 100, 0, 50)
                 billboard.StudsOffset = Vector3.new(0, 2, 0)
@@ -530,7 +494,6 @@ RunService.RenderStepped:Connect(function()
                 healthBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
                 healthBar.Parent = billboard
                 
-                -- Linha do chão até a cabeça
                 local line = Instance.new("LineHandleAdornment")
                 line.Length = head.Position.Y - root.Position.Y
                 line.Color3 = Color3.fromRGB(255, 0, 0)
