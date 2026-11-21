@@ -33,7 +33,7 @@ UICorner.Parent = MainFrame
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Name = "Title"
-TitleLabel.Text = "JDev"
+TitleLabel.Text = "JDev [Clique para Abrir]" -- Texto atualizado para indicar ação
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 16
@@ -42,7 +42,10 @@ TitleLabel.BackgroundTransparency = 1
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Center
 TitleLabel.Parent = MainFrame
 
--- Função de Arrastar
+-- Variável para controlar se o painel está aberto ou fechado
+local isPanelOpen = false
+
+-- Função de Arrastar (Mantida intacta)
 local dragging = false
 local dragStart = nil
 local startPos = nil
@@ -81,25 +84,18 @@ function GetCharacter()
     return Player.Character or Player.CharacterAdded:Wait()
 end
 
-function FindPartOnRay(ray)
-    local part = workspace:FindPartOnRay(ray, Player.Character, false, true)
-    return part
-end
-
 function TeleportToPosition(pos)
     local char = GetCharacter()
     if not char then return end
     local root = char:FindFirstChild("HumanoidRootPart")
     if root then
         root.CFrame = CFrame.new(pos)
-        -- Efeito visual suave
         TweenService:Create(root, TweenInfo.new(0.5), {CFrame = CFrame.new(pos)}):Play()
     end
 end
 
 function PrintLog(msg)
     print("[JDev] " .. msg)
-    -- Opcional: Criar um aviso na tela se quiser
 end
 
 -- ==========================================
@@ -110,7 +106,7 @@ local SeaLevels = {
         ["Marine Start"] = Vector3.new(-75, 5, -200),
         ["Jungle"] = Vector3.new(1400, 5, 100),
         ["Desert Town"] = Vector3.new(3000, 5, 1000),
-        ["Sky Island"] = Vector3.new(0, 1500, 0), -- Ajuste manual se necessário
+        ["Sky Island"] = Vector3.new(0, 1500, 0),
         ["Magma Village"] = Vector3.new(2000, 5, 2000),
         ["Frost Island"] = Vector3.new(-2000, 5, 2000),
         ["Marine Ford"] = Vector3.new(1000, 5, 2500),
@@ -119,7 +115,7 @@ local SeaLevels = {
         ["Sabaody Archipelago"] = Vector3.new(0, 5, 4000),
         ["Dark Arena"] = Vector3.new(-1000, 5, 4000),
         ["Holy Tower"] = Vector3.new(0, 2000, 4500),
-        ["Great Tree"] = Vector3.new(0, 3000, 0), -- Evento
+        ["Great Tree"] = Vector3.new(0, 3000, 0),
         ["Snow Mountain"] = Vector3.new(-4000, 5, 1000)
     },
     ["Second Sea"] = {
@@ -147,7 +143,7 @@ local SeaLevels = {
         ["Zone 2"] = Vector3.new(-4000, 5, 0),
         ["Zone 3"] = Vector3.new(0, 5, 4000),
         ["Zone 4"] = Vector3.new(0, 5, -4000),
-        ["Egghead"] = Vector3.new(6000, 5, 6000), -- Nova Ilha
+        ["Egghead"] = Vector3.new(6000, 5, 6000),
         ["Jido"] = Vector3.new(-6000, 5, 6000),
         ["Mansion"] = Vector3.new(6000, 5, -6000),
         ["Green Zone"] = Vector3.new(-6000, 5, -6000),
@@ -173,20 +169,18 @@ end
 -- ==========================================
 -- MÓDULO 4: FRUTAS REAIS & NOVAS (SPAWN)
 -- ==========================================
--- Lista atualizada Nov/2026 incluindo frutas V4, V5, V6 e eventos recentes
 local FruitList = {
     "Flame", "Ice", "Lightning", "Darkness", "Quake", "Rumble", "Magma", "Shadow", 
     "Phoenix", "Dough", "String", "Sand", "Rubber", "Barrier", "Diamond", "Spindle",
     "Paw", "Soul", "Gravity", "Love", "Control", "Zombie", "Revive", "Portal",
     "Blast", "Spirit", "Fleet", "Rage", "T-Rex", "Mammoth", "Buddha", "Dragon",
-    "Leopard", "Cere", "Jizo", "Qilin", "Yami", "Nui Nui" -- Adicione mais conforme atualizações
+    "Leopard", "Cere", "Jizo", "Qilin", "Yami", "Nui Nui"
 }
 
 function SpawnFruit(FruitName)
     local backpack = Player.Backpack
     local char = GetCharacter()
     
-    -- Verifica se já tem a fruta na mão para evitar duplicação visual
     local existingTool = char:FindFirstChild(FruitName .. " Fruit")
     if existingTool then
         existingTool:Destroy()
@@ -197,8 +191,7 @@ function SpawnFruit(FruitName)
     newFruit.ToolTip = FruitName .. " Fruit (JDev)"
     newFruit.Parent = backpack
     
-    -- Tenta atribuir ícones baseados no nome (simplificado)
-    local iconId = "rbxassetid://1037584860" -- Ícone genérico de fruta
+    local iconId = "rbxassetid://1037584860"
     if FruitName == "Buddha" then iconId = "rbxassetid://1197688191"
     elseif FruitName == "Dragon" then iconId = "rbxassetid://1197688205"
     elseif FruitName == "Leopard" then iconId = "rbxassetid://1197688215"
@@ -208,9 +201,7 @@ function SpawnFruit(FruitName)
     
     newFruit.Icon = iconId
     
-    -- Força o cliente a reconhecer a fruta como válida
     newFruit.Activated:Connect(function()
-        -- Simula a ativação básica caso o RemoteEvent falhe
         PrintLog("Fruta " .. FruitName .. " ativada!")
     end)
     
@@ -223,7 +214,7 @@ function RandomFruit()
 end
 
 -- ==========================================
--- MÓDULO 5: ADMIN & COMBATE (PHANTOM/GOD MODE)
+-- MÓDULO 5: ADMIN & COMBATE
 -- ==========================================
 function EnableGodMode()
     local char = GetCharacter()
@@ -231,17 +222,10 @@ function EnableGodMode()
     
     local humanoid = char:FindFirstChild("Humanoid")
     if humanoid then
-        -- Configurações de "Admin"
         humanoid.MaxHealth = 999999
         humanoid.Health = 999999
         humanoid.WalkSpeed = 30
         
-        -- Flag para não levar dano de outros jogadores (simulado via LocalScript)
-        -- Em Blox Fruits, isso depende muito do RemoteEvent de Dano.
-        -- Vamos criar uma flag local.
-        game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.All, true)
-        
-        -- Loop para regenerar vida instantaneamente
         while wait(0.1) do
             if humanoid.Health < humanoid.MaxHealth then
                 humanoid.Health = humanoid.MaxHealth
@@ -251,14 +235,13 @@ function EnableGodMode()
 end
 
 function EnableAttackNoDeath()
-    -- Permite atacar sem ser atacado facilmente (simulado)
     local char = GetCharacter()
     if not char then return end
     
     local root = char:FindFirstChild("HumanoidRootPart")
     if root then
-        root.CanCollide = false -- Passa através de tudo
-        root.Transparency = 0.5 -- Meio transparente para efeito visual
+        root.CanCollide = false
+        root.Transparency = 0.5
     end
     PrintLog("Modo Fantasma Ativado: Sem colisão, ataque livre.")
 end
@@ -267,31 +250,23 @@ end
 -- MÓDULO 6: HAKI & SKILLS
 -- ==========================================
 function BuyHaki(HakiType)
-    -- Simula a compra de Haki usando o método comum de UI ou RemoteEvent
     local gui = Player.PlayerGui:FindFirstChild("MainGUI")
     if gui then
         local hakiBtn = gui:FindFirstChild("HakiTab")
         if hakiBtn then
-            -- Tenta clicar no botão correspondente
-            -- Nota: Isso varia conforme a versão exata do GUI
             PrintLog("Comprando " .. HakiType .. "...")
-            
-            -- Método alternativo: Enviar evento direto se conhecido
-            -- Para maior compatibilidade, usamos o clique virtual se possível
             local button = gui.HakiTab:FindFirstChild(HakiType) or gui.HakiTab:FindFirstChild(HakiType .. "Buy")
             if button and button:IsA("TextButton") then
                 button:Activate()
                 PrintLog("Haki " .. HakiType .. " comprado!")
             else
-                PrintLog("Botão de Haki não encontrado automaticamente. Tente abrir o menu de Haki no jogo.")
+                PrintLog("Botão de Haki não encontrado automaticamente.")
             end
         end
     end
 end
 
 function InfiniteSpin()
-    -- Remove o tempo de espera para girar frutas
-    -- Em versões recentes, isso é feito manipulando o cooldown da habilidade
     local char = GetCharacter()
     if not char then return end
     
@@ -300,7 +275,6 @@ function InfiniteSpin()
         cooldown.Value = 0
         PrintLog("Cooldown de Spin removido!")
     else
-        -- Se não tiver cooldown visível, cria um loop que zera o valor
         while wait(0.1) do
             local c = char:FindFirstChild("Cooldown")
             if c then c.Value = 0 end
@@ -309,19 +283,17 @@ function InfiniteSpin()
 end
 
 -- ==========================================
--- MÓDULO 7: COMPRAS DE ITENS RAROS (LONG RANGE)
+-- MÓDULO 7: COMPRAS DE ITENS RAROS
 -- ==========================================
 function BuyItem(ItemName)
-    -- Tenta encontrar o item na lista de compras do jogo ou simular a compra
     local playerData = Player:FindFirstChild("leaderstats")
     if playerData then
-        -- Muitos scripts de compra usam RemoteEvents específicos
         local remote = game.ReplicatedStorage.Remotes.CommF_:FindFirstChild("BuyItem")
         if remote then
             remote:InvokeServer(ItemName)
             PrintLog("Item " .. ItemName .. " solicitado para compra.")
         else
-            PrintLog("Remote de compra não encontrado. Verifique se o item existe no servidor.")
+            PrintLog("Remote de compra não encontrado.")
         end
     end
 end
@@ -336,19 +308,15 @@ function SetLevel(Level)
         if levelStat then
             levelStat.Value = Level
             PrintLog("Nível alterado para: " .. tostring(Level))
-            
-            -- Atualiza também o XP se necessário
-            local xpStat = stats:FindFirstChild("Beli") -- Às vezes o XP é calculado
-            -- Em algumas versões, o nível é recalculado pelo servidor, mas isso força o cliente
         end
     end
 end
 
 -- ==========================================
--- EXECUÇÃO DO PAINEL (CONEXÃO COM BOTÕES)
+-- EXECUÇÃO DO PAINEL (LÓGICA CORRIGIDA)
 -- ==========================================
 
--- Criar botões dinamicamente para demonstração rápida
+-- Criar container dos botões
 local ButtonContainer = Instance.new("Frame")
 ButtonContainer.Name = "Buttons"
 ButtonContainer.Size = UDim2.new(0, 280, 0, 300)
@@ -357,6 +325,7 @@ ButtonContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 ButtonContainer.BorderSizePixel = 0
 ButtonContainer.Parent = ScreenGui
 
+-- CORREÇÃO DO TYPO: CreateEleButton -> CreateButton
 local function CreateButton(text, action)
     local btn = Instance.new("TextButton")
     btn.Text = text
@@ -373,7 +342,6 @@ local function CreateButton(text, action)
     
     btn.MouseButton1Click:Connect(action)
     
-    -- Hover effect
     btn.MouseEnter:Connect(function()
         btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -386,6 +354,23 @@ local function CreateButton(text, action)
     return btn
 end
 
+-- Lógica para Abrir/Fechar o Painel ao clicar no Título
+TitleLabel.MouseButton1Click:Connect(function()
+    isPanelOpen = not isPanelOpen
+    if isPanelOpen then
+        ButtonContainer.Visible = true
+        TitleLabel.Text = "JDev [Clique para Fechar]"
+        -- Animação simples de abertura
+        ButtonContainer:TweenSizeAndPosition(UDim2.new(0, 280, 0, 300), UDim2.new(0, 0, 0, 40), "Out", "Quad", 0.2)
+    else
+        ButtonContainer.Visible = false
+        TitleLabel.Text = "JDev [Clique para Abrir]"
+    end
+end)
+
+-- Inicialmente escondido
+ButtonContainer.Visible = false
+
 -- Botões Principais
 CreateButton("🌀 Teleport: Sky Island", function() TeleportToIsland("First Sea", "Sky Island") end)
 CreateButton("🌀 Teleport: Egghead (Novo)", function() TeleportToIsland("Third Sea", "Egghead") end)
@@ -395,10 +380,7 @@ CreateButton("🌀 Teleport: Holy Tower", function() TeleportToIsland("First Sea
 CreateButton("🍎 Spawn Fruta Aleatória", function() RandomFruit() end)
 CreateButton("🐉 Spawn Buddha Fruit", function() SpawnFruit("Buddha") end)
 CreateButton("🦖 Spawn T-Rex Fruit (Novo)", function() SpawnFruit("T-Rex") end)
-CreateEleButton("🐘 Spawn Mammoth Fruit (Novo)", function() SpawnFruit("Mammoth") end) -- Corrigido typo abaixo
-
--- Correção de typo no código acima para garantir execução
-local mammothBtn = CreateButton("🐘 Spawn Mammoth Fruit (Novo)", function() SpawnFruit("Mammoth") end)
+CreateButton("🐘 Spawn Mammoth Fruit (Novo)", function() SpawnFruit("Mammoth") end)
 
 CreateButton("👻 Modo Fantasma (Sem Colisão)", function() EnableAttackNoDeath() end)
 CreateButton("❤️ God Mode (Invencível)", function() EnableGodMode() end)
@@ -413,8 +395,8 @@ CreateButton("💰 Beli: 999 Milhões", function()
     if beli then beli.Value = 999999999 end
 end)
 
-CreateButton("🛒 Comprar TTK (Long Range)", function() BuyItem("Tea Time King") end) -- Exemplo
-CreateButton("🛒 Comprar CDK (Long Range)", function() BuyItem("Cursed Dual Katana") end) -- Exemplo
+CreateButton("🛒 Comprar TTK (Long Range)", function() BuyItem("Tea Time King") end)
+CreateButton("🛒 Comprar CDK (Long Range)", function() BuyItem("Cursed Dual Katana") end)
 
 -- Input de Nível Personalizado
 local levelInputFrame = Instance.new("Frame")
@@ -456,4 +438,4 @@ applyBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-PrintLog("JDev Script Carregado! Use o painel para comandos.")
+PrintLog("JDev Script Carregado! Clique em 'JDev' para abrir o painel.")
