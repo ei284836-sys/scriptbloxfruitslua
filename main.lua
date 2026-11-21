@@ -1,5 +1,5 @@
 --=====================================================================
---  JDEV v6  •  BLOX FRUITS  •  DELTA
+--  JDEV v6.2  •  BLOX FRUITS  •  DELTA
 --=====================================================================
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
@@ -340,7 +340,7 @@ end
 local S = {
 	speed = 40, jH = 50, jOn = false, multi = 1, god = false, infJ = false, noclip = false,
 	fly = false, flyH = 70, flyV = 60, lock = false, acc = 0.35,
-	farm = false, range = 120, atk = false, chest = false, collect = false, hit = 1, camFov = 70,
+	farm = false, range = 120, atk = false, chest = false, collect = false, hit = 1,
 }
 local function chr() return Player.Character end
 local function root()
@@ -390,14 +390,26 @@ UIS.JumpRequest:Connect(function()
 		doJump()
 	end
 end)
+
+local function setHit(mult)
+	S.hit = mult
+	local r = root()
+	if r then r.Size = Vector3.new(2 * mult, 2 * mult, 1 * mult) end
+end
+
 Player.CharacterAdded:Connect(function(c)
 	task.wait(1)
 	S.fly = false
+	if R.FlyPad then R.FlyPad.Visible = false end
 	local h = c:WaitForChild("Humanoid", 8)
 	if h then
 		h.StateChanged:Connect(function(s)
 			if s == Enum.HumanoidStateType.Landed then jumpN = S.multi - 1 end
 		end)
+	end
+	local r = c:WaitForChild("HumanoidRootPart", 5)
+	if r and S.hit ~= 1 then
+		r.Size = Vector3.new(2 * S.hit, 2 * S.hit, 1 * S.hit)
 	end
 	stats()
 end)
@@ -406,7 +418,8 @@ local function invoke(...)
 	local rem = RS:FindFirstChild("Remotes")
 	local c = rem and rem:FindFirstChild("CommF_")
 	if not c then return false end
-	return pcall(function() c:InvokeServer(...) end)
+	local args = table.pack(...)
+	return pcall(function() return c:InvokeServer(table.unpack(args, 1, args.n)) end)
 end
 
 local PLACES = {
@@ -551,7 +564,10 @@ local function groupSpawn(list, label)
 	note((label or "grupo") .. " " .. okN .. "/" .. #list, miss == 0 and "good" or "bad")
 end
 
-local E = { on = false, box = true, nm = true, hp = true, sk = true, ln = true, fr = false, chest = false, team = false }
+local E = {
+	on = false, plr = true, box = true, nm = true, hp = true, sk = true, ln = true,
+	fr = false, chest = false, team = false, dist = 900,
+}
 local ec = {}
 local BONES = {
 	{ "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" }, { "UpperTorso", "LeftUpperArm" },
@@ -561,14 +577,23 @@ local BONES = {
 	{ "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" },
 }
 
-local function clearEsp()
-	for t, d in pairs(ec) do
-		if d.box then d.box:Destroy() end
-		if d.bill then d.bill:Destroy() end
-		if d.ln then d.ln:Destroy() end
+local function killEsp(t)
+	local d = ec[t]
+	if not d then return end
+	if d.box then d.box:Destroy() end
+	if d.hi then d.hi:Destroy() end
+	if d.bill then d.bill:Destroy() end
+	if d.ln then d.ln:Destroy() end
+	if d.lines then
 		for _, l in ipairs(d.lines) do l:Destroy() end
 	end
-	ec = {}
+	ec[t] = nil
+end
+
+local function clearEsp()
+	local list = {}
+	for t in pairs(ec) do table.insert(list, t) end
+	for _, t in ipairs(list) do killEsp(t) end
 end
 
 local function buildEsp(t, plr)
@@ -584,28 +609,40 @@ local function buildEsp(t, plr)
 	local d = { lines = {} }
 	if E.box then
 		d.box = new("BoxHandleAdornment", {
-			Size = Vector3.new(4, 5.4, 2), AlwaysOnTop = true, ZIndex = 5,
-			Transparency = 0.45, Color3 = col, Adornee = hrp,
+			Size = Vector3.new(4, 5.4, 2), Thickness = 2, AlwaysOnTop = true, ZIndex = 5,
+			Transparency = 0.3, Color3 = col, Adornee = hrp,
 		}, hrp)
+		d.hi = new("Highlight", {
+			FillTransparency = 1, OutlineTransparency = 0.1, OutlineColor = col,
+			DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Adornee = t,
+		}, t)
 	end
 	if (E.nm or E.hp) and head then
-		d.bill = new("BillboardGui", { Size = UDim2.fromOffset(140, 42), StudsOffset = Vector3.new(0, 2.6, 0), AlwaysOnTop = true, Adornee = head }, head)
+		d.bill = new("BillboardGui", {
+			Size = UDim2.fromOffset(150, 44), StudsOffset = Vector3.new(0, 2.7, 0),
+			AlwaysOnTop = true, Adornee = head,
+		}, head)
 		if E.nm then
 			d.lbl = new("TextLabel", {
 				Text = t.Name, Font = Enum.Font.GothamBold, TextSize = 12, TextColor3 = Color3.new(1, 1, 1),
-				TextStrokeTransparency = 0.4, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 15),
+				TextStrokeTransparency = 0.3, BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 16),
 			}, d.bill)
 		end
 		if E.hp then
-			local bg = new("Frame", { Size = UDim2.new(0.8, 0, 0, 5), Position = UDim2.fromOffset(14, 17), BackgroundColor3 = Color3.fromRGB(18, 18, 22), BorderSizePixel = 0 }, d.bill)
-			corner(bg, 2)
+			local bg = new("Frame", {
+				Size = UDim2.new(0.82, 0, 0, 6), Position = UDim2.fromOffset(13, 18),
+				BackgroundColor3 = Color3.fromRGB(16, 16, 20), BorderSizePixel = 0,
+			}, d.bill)
+			corner(bg, 3)
 			d.fill = new("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.good, BorderSizePixel = 0 }, bg)
-			corner(d.fill, 2)
+			corner(d.fill, 3)
 		end
 	end
 	if E.sk and h then
 		for i = 1, #BONES do
-			d.lines[i] = new("LineHandleAdornment", { Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 6, Adornee = hrp, Length = 0 }, c)
+			d.lines[i] = new("LineHandleAdornment", {
+				Thickness = 1, Color3 = col, AlwaysOnTop = true, ZIndex = 6, Adornee = hrp, Length = 0,
+			}, c)
 		end
 	end
 	if E.ln and head then
@@ -618,24 +655,22 @@ local function tickEsp()
 	local c = cam()
 	if not c then return end
 	for t, d in pairs(ec) do
-		if not t.Parent then
-			clearEsp()
-			break
-		end
 		local hrp = t:FindFirstChild("HumanoidRootPart") or t:FindFirstChild("Torso")
 		local head = t:FindFirstChild("Head")
 		local h = t:FindFirstChildOfClass("Humanoid")
-		if d.box and hrp then d.box.Adornee = hrp end
-		if d.bill and head then d.bill.Adornee = head end
-		if d.fill and h then
-			local rt = math.clamp(h.Health / math.max(h.MaxHealth, 1), 0, 1)
-			d.fill.Size = UDim2.new(rt, 0, 1, 0)
-			d.fill.BackgroundColor3 = C.bad:Lerp(C.good, rt)
-		end
-		if d.lbl and head then
-			d.lbl.Text = t.Name .. "  [" .. math.floor((c.CFrame.Position - head.Position).Magnitude) .. "]"
-		end
-		if hrp then
+		if not t.Parent or not hrp then
+			killEsp(t)
+		else
+			if d.box then d.box.Adornee = hrp end
+			if d.bill and head then d.bill.Adornee = head end
+			if d.fill and h then
+				local rt = math.clamp(h.Health / math.max(h.MaxHealth, 1), 0, 1)
+				d.fill.Size = UDim2.new(rt, 0, 1, 0)
+				d.fill.BackgroundColor3 = C.bad:Lerp(C.good, rt)
+			end
+			if d.lbl and head then
+				d.lbl.Text = t.Name .. "  [" .. math.floor((c.CFrame.Position - head.Position).Magnitude) .. "]"
+			end
 			for i, bn in ipairs(BONES) do
 				local ln = d.lines[i]
 				if ln then
@@ -657,22 +692,37 @@ local function tickEsp()
 	end
 end
 
+local espScan = 0
 Run.RenderStepped:Connect(function()
 	if not E.on then return end
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= Player and p.Character and not (E.team and p.Team == Player.Team) then
-			local h = p.Character:FindFirstChildOfClass("Humanoid")
-			if h and h.Health > 0 then buildEsp(p.Character, p) end
+	local myRoot = root()
+	local myPos = myRoot and myRoot.Position
+	if E.plr then
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= Player and p.Character and not (E.team and p.Team == Player.Team) then
+				local h = p.Character:FindFirstChildOfClass("Humanoid")
+				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+				local okDist = true
+				if myPos and hrp then okDist = (hrp.Position - myPos).Magnitude <= E.dist end
+				if h and h.Health > 0 and okDist then
+					buildEsp(p.Character, p)
+				elseif not okDist and ec[p.Character] then
+					killEsp(p.Character)
+				end
+			end
 		end
 	end
-	if E.fr then
-		for _, o in ipairs(workspace:GetChildren()) do
-			if o.Name:find("Fruit") and not o:FindFirstChildOfClass("Humanoid") then buildEsp(o, nil) end
+	espScan += 1
+	if espScan % 30 == 0 then
+		if E.fr then
+			for _, o in ipairs(workspace:GetChildren()) do
+				if o.Name:find("Fruit") and not o:FindFirstChildOfClass("Humanoid") then buildEsp(o, nil) end
+			end
 		end
-	end
-	if E.chest then
-		for _, o in ipairs(workspace:GetDescendants()) do
-			if o.Name:lower():find("chest") and o:IsA("Model") then buildEsp(o, nil) end
+		if E.chest then
+			for _, o in ipairs(workspace:GetChildren()) do
+				if o:IsA("Model") and o.Name:lower():find("chest") then buildEsp(o, nil) end
+			end
 		end
 	end
 	tickEsp()
@@ -760,9 +810,9 @@ local function nearest(tag)
 	local r = root()
 	if not r then return nil end
 	local best, bd
-	for _, o in ipairs(workspace:GetDescendants()) do
-		if o.Name:lower():find(tag) and (o:IsA("Model") or o:IsA("BasePart")) then
-			local part = o:IsA("BasePart") and o or (o.PrimaryPart or o:FindFirstChildWhichIsA("BasePart"))
+	for _, o in ipairs(workspace:GetChildren()) do
+		if o:IsA("Model") and o.Name:lower():find(tag) then
+			local part = o.PrimaryPart or o:FindFirstChildWhichIsA("BasePart")
 			if part then
 				local d = (part.Position - r.Position).Magnitude
 				if not bd or d < bd then best, bd = part, d end
@@ -779,7 +829,7 @@ Run.Heartbeat:Connect(function()
 	local target
 	if S.farm then
 		local best, bd
-		for _, m in ipairs(workspace:GetDescendants()) do
+		for _, m in ipairs(workspace:GetChildren()) do
 			if m:IsA("Model") and not Players:GetPlayerFromCharacter(m) then
 				local h = m:FindFirstChildOfClass("Humanoid")
 				local rr = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChildWhichIsA("BasePart")
@@ -835,13 +885,6 @@ local function setBright(on)
 	end
 end
 
-local function setHit(mult)
-	S.hit = mult
-	local r = root()
-	if not r then return end
-	r.Size = Vector3.new(2 * mult, 2 * mult, 1 * mult)
-end
-
 local antiAfk = false
 UIS.WindowFocused:Connect(function()
 	if not antiAfk then return end
@@ -853,11 +896,7 @@ end)
 
 local function setFps(on)
 	pcall(function()
-		if on then
-			setfpscap(240)
-		else
-			setfpscap(60)
-		end
+		if on then setfpscap(240) else setfpscap(60) end
 	end)
 end
 
@@ -995,14 +1034,22 @@ local function build()
 	Players.PlayerAdded:Connect(function() task.wait(0.4); refresh() end)
 	Players.PlayerRemoving:Connect(function() task.wait(0.4); refresh() end)
 	sec(tp, "Waypoints")
-	inp(tp, "nome do waypoint", function(n)
+	R.WpGrid = grid(tp, 2)
+	local function refreshWp()
+		for _, c in ipairs(R.WpGrid:GetChildren()) do
+			if c:IsA("TextButton") then c:Destroy() end
+		end
+		for _, w in ipairs(R.Wp) do
+			gbtn(R.WpGrid, w[1], C.cyan, function() TP(w[2], w[1]) end)
+		end
+	end
+	inp(tp, "salvar waypoint (nome)", function(n)
 		local r = root()
 		if not r then return end
 		table.insert(R.Wp, { n, r.Position })
-		note("salvo " .. n, "good")
-		log("waypoint " .. n, "ok")
+		refreshWp()
+		note("waypoint " .. n, "good")
 	end)
-	R.WpGrid = grid(tp, 2)
 
 	-- SPAWN
 	local sp = page("Spawn")
@@ -1151,7 +1198,7 @@ local function build()
 	end)
 	sld(cb, "Alcance", 20, 400, 120, function(v) S.range = v end)
 	tog(cb, "Auto ataque", false, function(v) S.atk = v end)
-	tog(cb, "Auto bau", false, function(v) S.chest = v end)
+	tog(cb, "Auto baú", false, function(v) S.chest = v end)
 	tog(cb, "Auto coletar fruta", false, function(v) S.collect = v end)
 
 	-- VISUAL
@@ -1162,12 +1209,17 @@ local function build()
 		if not v then clearEsp() end
 		log(v and "esp on" or "esp off", "ok")
 	end)
-	tog(vs, "Caixa", true, function(v) E.box = v; clearEsp() end)
+	tog(vs, "Jogadores", true, function(v)
+		E.plr = v
+		if not v then clearEsp() end
+	end)
+	tog(vs, "Caixa + contorno", true, function(v) E.box = v; clearEsp() end)
 	tog(vs, "Nome + distância", true, function(v) E.nm = v; clearEsp() end)
 	tog(vs, "Vida", true, function(v) E.hp = v; clearEsp() end)
 	tog(vs, "Esqueleto", true, function(v) E.sk = v; clearEsp() end)
 	tog(vs, "Linha", true, function(v) E.ln = v; clearEsp() end)
 	tog(vs, "Ignorar time", false, function(v) E.team = v; clearEsp() end)
+	sld(vs, "Distância máx.", 50, 3000, 900, function(v) E.dist = v end)
 	sec(vs, "Objetos")
 	tog(vs, "ESP de frutas", false, function(v) E.fr = v; clearEsp() end)
 	tog(vs, "ESP de baús", false, function(v) E.chest = v; clearEsp() end)
@@ -1375,22 +1427,6 @@ local function build()
 		local t = string.format("Vector3.new(%d, %d, %d)", p.X, p.Y, p.Z)
 		if setclipboard then pcall(setclipboard, t) end
 		note(t)
-	end)
-
-	-- waypoints dinâmicos
-	local function refreshWp()
-		for _, c in ipairs(R.WpGrid:GetChildren()) do
-			if c:IsA("TextButton") then c:Destroy() end
-		end
-		for _, w in ipairs(R.Wp) do
-			gbtn(R.WpGrid, w[1], C.cyan, function() TP(w[2], w[1]) end)
-		end
-	end
-	inp(tp, "novo waypoint (nome)", function(n)
-		local r = root()
-		if not r then return end
-		table.insert(R.Wp, { n, r.Position })
-		refreshWp()
 	end)
 
 	local function open(v)
